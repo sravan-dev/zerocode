@@ -1,22 +1,18 @@
 import fs from 'fs';
 import path from 'path';
-import { AppConfig, ProviderConfig, PROVIDER_TYPES, RouteCandidate } from './types';
+import { AppConfig, ProviderConfig, PROVIDER_TYPES, REMOVED_PROVIDER_TYPES, RouteCandidate } from './types';
 
 export const VERSION = '0.1.0';
 
 const DEFAULT_ROUTE: RouteCandidate[] = [
-  { provider: 'antigravity', model: 'gemini-3-pro-preview' },
   { provider: 'groq', model: 'llama-3.3-70b-versatile' },
-  { provider: 'gemini', model: 'gemini-2.0-flash' },
   { provider: 'openrouter', model: 'meta-llama/llama-3.3-70b-instruct:free' }
 ];
 
 const DEFAULT_PROVIDERS: ProviderConfig[] = [
   { id: 'openrouter', name: 'OpenRouter', type: 'openrouter', baseUrl: 'https://openrouter.ai/api/v1', apiKey: '', enabled: true },
   { id: 'groq', name: 'Groq', type: 'groq', baseUrl: 'https://api.groq.com/openai/v1', apiKey: '', enabled: true },
-  { id: 'gemini', name: 'Google Gemini', type: 'gemini', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', apiKey: '', enabled: true },
   // GitHub Models ('github' type) retired by GitHub on 2026-07-30; kept in PROVIDER_TYPES only so old configs still load.
-  { id: 'antigravity', name: 'Google Antigravity', type: 'antigravity', baseUrl: 'https://cloudcode-pa.googleapis.com/v1internal', apiKey: '', enabled: true },
   { id: 'opencode', name: 'OpenCode Zen', type: 'opencode', baseUrl: 'https://opencode.ai/zen/v1', apiKey: '', enabled: true },
   { id: 'opencode-go', name: 'OpenCode Go', type: 'opencode', baseUrl: 'https://opencode.ai/zen/go/v1', apiKey: '', enabled: true }
 ];
@@ -81,6 +77,7 @@ function readConfigFile(): AppConfig {
     if (Array.isArray(raw.providers)) {
       cfg.providers = raw.providers
         .filter((p: any) => p && typeof p.id === 'string' && p.id && /^[a-z0-9-_]{1,40}$/i.test(p.id))
+        .filter((p: any) => !REMOVED_PROVIDER_TYPES.includes(p.type))
         .map((p: any) => ({
           id: p.id,
           name: typeof p.name === 'string' && p.name.trim() ? p.name.trim() : p.id,
@@ -89,12 +86,14 @@ function readConfigFile(): AppConfig {
           apiKey: typeof p.apiKey === 'string' ? p.apiKey : '',
           enabled: p.enabled !== false
         }));
-      for (const builtin of ['antigravity', 'opencode', 'opencode-go'] as const) {
+      for (const builtin of ['opencode', 'opencode-go'] as const) {
         if (!cfg.providers.some((p) => p.id === builtin)) {
           cfg.providers.push(DEFAULT_PROVIDERS.find((p) => p.id === builtin)!);
         }
       }
     }
+    const ids = new Set(cfg.providers.map((p) => p.id));
+    cfg.route = cfg.route.filter((c) => ids.has(c.provider));
     return cfg;
   } catch {
     return defaultConfig();
@@ -103,11 +102,16 @@ function readConfigFile(): AppConfig {
 
 export function saveConfig(cfg: AppConfig): void {
   const dir = configDir();
-  fs.mkdirSync(dir, { recursive: true });
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
   const file = configPath();
   const tmp = file + '.tmp';
-  fs.writeFileSync(tmp, JSON.stringify(cfg, null, 2));
+  fs.writeFileSync(tmp, JSON.stringify(cfg, null, 2), { mode: 0o600 });
   fs.renameSync(tmp, file);
+  try {
+    fs.chmodSync(file, 0o600);
+  } catch {
+    // best effort (e.g. Windows ignores POSIX modes)
+  }
 }
 
 export interface ConfigUpdate {

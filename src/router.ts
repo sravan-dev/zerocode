@@ -1,5 +1,4 @@
 import { AppConfig, RouteCandidate, Strategy } from './types';
-import { isAuthenticated } from './google-auth';
 
 interface HealthEntry {
   until: number;
@@ -27,7 +26,6 @@ export class Router {
     const p = cfg.providers.find((x) => x.id === c.provider);
     if (!p || !p.enabled) return false;
     if (p.type === 'custom') return true;
-    if (p.type === 'antigravity') return isAuthenticated();
     return !!p.apiKey;
   }
 

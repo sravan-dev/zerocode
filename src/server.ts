@@ -5,7 +5,6 @@ import { Router } from './router';
 import { LogStore } from './logs';
 import { createProxyHandlers } from './proxy';
 import { mountAdmin } from './admin-api';
-import { handleCallback, OAUTH_CALLBACK_PATH } from './google-auth';
 
 export interface ServerDeps {
   getConfig(): AppConfig;
@@ -41,29 +40,6 @@ export function createApp(deps: ServerDeps): express.Express {
   app.get('/v1/models', proxy.listModels);
   app.post('/v1/chat/completions', (req, res, next) => {
     proxy.chatCompletions(req, res).catch(next);
-  });
-
-  app.get(OAUTH_CALLBACK_PATH, async (req, res) => {
-    const escHtml = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
-    const page = (title: string, body: string) =>
-      '<!doctype html><meta charset="utf-8"><title>' + title + '</title>' +
-      '<body style="font-family:system-ui;background:#111;color:#eee;display:grid;place-items:center;height:100vh;margin:0">' +
-      '<div style="text-align:center"><h2>' + title + '</h2><p>' + body + '</p></div></body>';
-    const q = req.query as Record<string, string>;
-    if (q.error) {
-      res.status(400).send(page('Sign-in cancelled', 'Google returned: ' + escHtml(String(q.error))));
-      return;
-    }
-    if (typeof q.code !== 'string' || typeof q.state !== 'string') {
-      res.status(400).send(page('Sign-in failed', 'Missing code or state in the callback.'));
-      return;
-    }
-    try {
-      const r = await handleCallback(q.code, q.state);
-      res.send(page('Signed in', 'Google account ' + escHtml(r.email || '') + ' connected to Token Route. You can close this tab.'));
-    } catch (e: any) {
-      res.status(500).send(page('Sign-in failed', escHtml(String(e?.message || e))));
-    }
   });
 
   mountAdmin(app, deps);

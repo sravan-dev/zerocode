@@ -51,8 +51,7 @@ function main() {
     if (!anyKey) {
       console.log('  No provider keys configured yet.');
       console.log('  Open the dashboard -> Providers, paste a free API key');
-      console.log('  (Groq / OpenRouter / Google Gemini) or sign in with Google');
-      console.log('  on the Antigravity provider.');
+      console.log('  (Groq / OpenRouter / OpenCode).');
       console.log(line);
     }
     console.log('  Model "auto" (or your route alias) routes through the chain.');

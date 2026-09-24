@@ -1,6 +1,9 @@
-export type ProviderType = 'openrouter' | 'groq' | 'gemini' | 'github' | 'antigravity' | 'opencode' | 'custom';
+export type ProviderType = 'openrouter' | 'groq' | 'github' | 'opencode' | 'custom';
 
-export const PROVIDER_TYPES: ProviderType[] = ['openrouter', 'groq', 'gemini', 'github', 'antigravity', 'opencode', 'custom'];
+export const PROVIDER_TYPES: ProviderType[] = ['openrouter', 'groq', 'github', 'opencode', 'custom'];
+
+// Provider types that were removed; configs containing them are dropped on load.
+export const REMOVED_PROVIDER_TYPES = ['gemini', 'antigravity'];
 
 export interface ProviderConfig {
   id: string;

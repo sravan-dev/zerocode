@@ -1,6 +1,4 @@
 import { ProviderConfig } from './types';
-import { ANTIGRAVITY_MODELS } from './antigravity';
-import { getAccessToken } from './google-auth';
 
 export interface UpstreamModel {
   id: string;
@@ -31,7 +29,6 @@ function isFreeModel(m: any): boolean {
 }
 
 export async function listUpstreamModels(p: ProviderConfig, timeoutMs = 15000): Promise<UpstreamModel[]> {
-  if (p.type === 'antigravity') return ANTIGRAVITY_MODELS.slice();
   const url = p.baseUrl.replace(/\/+$/, '') + '/models';
   const ac = new AbortController();
   const t = setTimeout(() => ac.abort(), timeoutMs);
@@ -71,10 +68,6 @@ export async function listUpstreamModels(p: ProviderConfig, timeoutMs = 15000): 
 export async function testProvider(p: ProviderConfig): Promise<{ ok: boolean; ms: number; count: number; error?: string }> {
   const t0 = Date.now();
   try {
-    if (p.type === 'antigravity') {
-      await getAccessToken();
-      return { ok: true, ms: Date.now() - t0, count: ANTIGRAVITY_MODELS.length };
-    }
     const models = await listUpstreamModels(p, 12000);
     return { ok: true, ms: Date.now() - t0, count: models.length };
   } catch (e: any) {

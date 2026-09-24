@@ -6,7 +6,6 @@ import { listUpstreamModels, testProvider } from './providers';
 import { checkAuth } from './proxy';
 import { maskKey } from './utils';
 import { VERSION } from './config';
-import { authStatus, beginLogin, clearCreds, handleCallbackUrl, isAuthenticated } from './google-auth';
 
 export interface AdminDeps {
   getConfig(): AppConfig;
@@ -27,19 +26,15 @@ function sanitizedConfig(cfg: AppConfig) {
     requestTimeoutMs: cfg.requestTimeoutMs,
     routeName: cfg.routeName,
     route: cfg.route,
-    providers: cfg.providers.map((p) => {
-      const google = p.type === 'antigravity' ? authStatus() : null;
-      return {
-        id: p.id,
-        name: p.name,
-        type: p.type,
-        baseUrl: p.baseUrl,
-        enabled: p.enabled,
-        hasKey: google ? google.authenticated : !!p.apiKey,
-        keyHint: google ? google.email || '' : p.apiKey ? maskKey(p.apiKey) : '',
-        google: google || undefined
-      };
-    })
+    providers: cfg.providers.map((p) => ({
+      id: p.id,
+      name: p.name,
+      type: p.type,
+      baseUrl: p.baseUrl,
+      enabled: p.enabled,
+      hasKey: !!p.apiKey,
+      keyHint: p.apiKey ? maskKey(p.apiKey) : ''
+    }))
   };
 }
 
@@ -83,8 +78,7 @@ export function mountAdmin(app: Express, deps: AdminDeps): void {
     const cfg = getConfig();
     const p = cfg.providers.find((x) => x.id === (req.body || {}).id);
     if (!p) return res.status(404).json({ error: 'provider not found' });
-    if (p.type === 'antigravity' && !isAuthenticated()) return res.json({ ok: false, ms: 0, count: 0, error: 'Not signed in with Google' });
-    if (!p.apiKey && p.type !== 'custom' && p.type !== 'antigravity') return res.json({ ok: false, ms: 0, count: 0, error: 'No API key set' });
+    if (!p.apiKey && p.type !== 'custom') return res.json({ ok: false, ms: 0, count: 0, error: 'No API key set' });
     const result = await testProvider(p);
     res.json(result);
   });
@@ -93,41 +87,13 @@ export function mountAdmin(app: Express, deps: AdminDeps): void {
     const cfg = getConfig();
     const p = cfg.providers.find((x) => x.id === req.params.id);
     if (!p) return res.status(404).json({ error: 'provider not found' });
-    if (!p.apiKey && p.type !== 'custom' && p.type !== 'antigravity') return res.status(400).json({ error: 'No API key set for this provider' });
+    if (!p.apiKey && p.type !== 'custom') return res.status(400).json({ error: 'No API key set for this provider' });
     try {
       const models = await listUpstreamModels(p);
       res.json({ provider: p.id, models });
     } catch (e: any) {
       res.status(502).json({ error: String(e?.message || e) });
     }
-  });
-
-  api.get('/google/status', (_req, res) => {
-    res.json(authStatus());
-  });
-
-  api.post('/google/login', (_req, res) => {
-    try {
-      res.json(beginLogin(getConfig().port));
-    } catch (e: any) {
-      res.status(400).json({ error: String(e?.message || e) });
-    }
-  });
-
-  api.post('/google/callback', async (req, res) => {
-    const url = (req.body || {}).url;
-    if (typeof url !== 'string' || !url.trim()) return res.status(400).json({ error: 'url required' });
-    try {
-      const r = await handleCallbackUrl(url);
-      res.json({ ok: true, email: r.email });
-    } catch (e: any) {
-      res.status(400).json({ error: String(e?.message || e) });
-    }
-  });
-
-  api.post('/google/logout', (_req, res) => {
-    clearCreds();
-    res.json({ ok: true });
   });
 
   api.get('/health', (_req, res) => {

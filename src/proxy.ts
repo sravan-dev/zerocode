@@ -3,7 +3,6 @@ import { createHash } from 'crypto';
 import { Readable, Transform } from 'stream';
 import { AppConfig, RouteCandidate } from './types';
 import { providerHeaders } from './providers';
-import { antigravityRequest } from './antigravity';
 import { Router } from './router';
 import { LogStore } from './logs';
 import { retryAfterMs } from './utils';
@@ -169,25 +168,21 @@ export function createProxyHandlers(deps: ProxyDeps) {
       const timer = setTimeout(() => ac.abort(), cfg.requestTimeoutMs);
       let r: any;
       try {
-        if (p.type === 'antigravity') {
-          r = await antigravityRequest(cand.model, body, stream, ac.signal);
-        } else {
-          const headers: Record<string, string> = { ...providerHeaders(p), 'content-type': 'application/json' };
-          if (p.type === 'opencode') {
-            // OpenCode Go requires a stable per-conversation session id for routing/prompt caching.
-            const fromClient = req.headers['x-opencode-session'];
-            headers['x-opencode-session'] =
-              typeof fromClient === 'string' && fromClient.trim()
-                ? fromClient.trim().slice(0, 128)
-                : createHash('sha256').update(JSON.stringify((body.messages as any[])[0] ?? '')).digest('hex').slice(0, 32);
-          }
-          r = await fetch(url, {
-            method: 'POST',
-            headers,
-            body: JSON.stringify(upstreamBody),
-            signal: ac.signal
-          });
+        const headers: Record<string, string> = { ...providerHeaders(p), 'content-type': 'application/json' };
+        if (p.type === 'opencode') {
+          // OpenCode Go requires a stable per-conversation session id for routing/prompt caching.
+          const fromClient = req.headers['x-opencode-session'];
+          headers['x-opencode-session'] =
+            typeof fromClient === 'string' && fromClient.trim()
+              ? fromClient.trim().slice(0, 128)
+              : createHash('sha256').update(JSON.stringify((body.messages as any[])[0] ?? '')).digest('hex').slice(0, 32);
         }
+        r = await fetch(url, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(upstreamBody),
+          signal: ac.signal
+        });
       } catch (e: any) {
         clearTimeout(timer);
         lastError = `${p.name}: ${e?.name === 'AbortError' ? 'timed out' : 'network error'} (${String(e?.message || e).slice(0, 200)})`;
@@ -279,7 +274,7 @@ export function createProxyHandlers(deps: ProxyDeps) {
       res.set('x-accel-buffering', 'no');
       res.set('x-token-route-candidate', label);
       res.set('x-token-route-provider', p.name);
-      const nodeStream: Readable = r.body instanceof Readable ? r.body : Readable.fromWeb(r.body as any);
+      const nodeStream = Readable.fromWeb(r.body as any);
       const rewriter = sseRewriter(requested, {
         onFirstByte: () => {
           usageRef.ttft = Date.now() - started;

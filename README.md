@@ -2,7 +2,7 @@
 
 Self-hosted, OpenAI-compatible AI gateway. Point any OpenAI client at it and it routes each request through a chain of free and cheap model providers, with automatic failover and cooldown when a provider fails or rate-limits.
 
-- **Providers:** OpenRouter, Groq, Google Gemini, Google Antigravity (Google sign-in, no API key), OpenCode Zen, OpenCode Go, and any custom OpenAI-compatible endpoint (Ollama, LM Studio, Together, ...)
+- **Providers:** OpenRouter, Groq, OpenCode Zen, OpenCode Go, and any custom OpenAI-compatible endpoint (Ollama, LM Studio, Together, ...)
 - **Routing:** `failover` (in order) or `round-robin`; failed candidates cool down and are skipped
 - **Dashboard:** manage keys, browse and add models, reorder the route, request log, and a playground
 
@@ -38,16 +38,10 @@ On **Coolify**: create a resource from this repo, choose the **Dockerfile** buil
 | `TOKEN_ROUTE_PROXY_KEY` | unset | Required API key for clients and the dashboard (applied if none is saved yet) |
 | `HOST` | `0.0.0.0` | Bind address |
 | `PORT` | `3777` | Listen port |
-| `TOKEN_ROUTE_HOME` | `/data` | Where `config.json` and Google credentials are stored; mount a volume here |
-| `GOOGLE_OAUTH_CLIENT_ID` | unset | Enables Google Antigravity sign-in (installed-app OAuth client) |
-| `GOOGLE_OAUTH_CLIENT_SECRET` | unset | Secret for the client above |
+| `TOKEN_ROUTE_HOME` | `/data` | Where `config.json` is stored; mount a volume here |
 
-Locally, put these in a `.env` file in the project root (see `.env.example`); it is loaded at startup and excluded from git and the Docker image.
-
-### Google Antigravity sign-in on a server
-
-Requires `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET`. Google always redirects to `http://localhost:3777/oauth2callback` after consent, which won't load when the gateway runs on a server. Copy that full URL from your browser's address bar and paste it into the **Finish sign-in** box on the Antigravity provider card.
+Locally, you can put these in a `.env` file in the project root (see `.env.example`); it is loaded at startup and excluded from git and the Docker image.
 
 ## Data and security
 
-Provider API keys and Google tokens are stored only in `TOKEN_ROUTE_HOME` (`data/` locally), which is excluded from git and from the Docker image.
+Provider API keys are stored only in `TOKEN_ROUTE_HOME` (`data/` locally), which is excluded from git and from the Docker image.

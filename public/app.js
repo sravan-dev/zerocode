@@ -90,7 +90,7 @@ function healthDotClass(st) {
 function healthLabel(h) {
   if (h.state === 'healthy') return 'ready';
   if (h.state === 'cooldown') return 'cooling ' + Math.ceil((h.remainingMs || 0) / 1000) + 's';
-  return 'needs API key / sign-in';
+  return 'needs API key';
 }
 
 async function loadStatus() { state.status = await api('/api/status'); }
@@ -137,15 +137,10 @@ function renderOverview() {
   }).join('');
   const providersList = (cfg.providers || []).map((p) => {
     const url = keyUrl(p.type);
-    const isG = p.type === 'antigravity';
-    const status = p.hasKey ? (isG ? 'signed in' : 'key set') : (isG ? 'not signed in' : 'no key');
-    const action = p.hasKey
-      ? ''
-      : isG
-        ? '<a href="#" class="btn small" onclick="setView(\'providers\');return false">Sign in</a>'
-        : url
-          ? '<a href="' + esc(url) + '" target="_blank" rel="noopener" class="btn small">Get key &#8599;</a>'
-          : '';
+    const status = p.hasKey ? 'key set' : 'no key';
+    const action = !p.hasKey && url
+      ? '<a href="' + esc(url) + '" target="_blank" rel="noopener" class="btn small">Get key &#8599;</a>'
+      : '';
     return (
       '<div class="row" style="padding:6px 0">' +
       '<span class="dot ' + (p.enabled ? (p.hasKey ? 'ok' : 'warn') : 'dim') + '"></span>' +
@@ -159,7 +154,7 @@ function renderOverview() {
   const curl = 'curl ' + base + '/chat/completions \\\n  -H "content-type: application/json" \\\n  -d \'{"model":"auto","messages":[{"role":"user","content":"hello"}]}\'';
   const checklist = !anyKey
     ? '<div class="card"><h2>Getting started</h2>' +
-      '<div class="check-item"><span class="n">1</span><span>Add a free API key on the <a href="#" onclick="setView(\'providers\');return false">Providers</a> page (Groq, OpenRouter, Gemini) or sign in with Google on the Antigravity provider</span></div>' +
+      '<div class="check-item"><span class="n">1</span><span>Add a free API key on the <a href="#" onclick="setView(\'providers\');return false">Providers</a> page (Groq, OpenRouter or OpenCode)</span></div>' +
       '<div class="check-item"><span class="n">2</span><span>Browse models and add your favourites to the route</span></div>' +
       '<div class="check-item"><span class="n">3</span><span>Point any OpenAI-compatible client at the API base below with model <span class="mono">auto</span></span></div>' +
       '</div>'
@@ -226,22 +221,9 @@ function renderProviders() {
     const d = state.drafts[p.id] || {};
     const baseUrl = d.baseUrl != null ? d.baseUrl : p.baseUrl;
     const enabled = d.enabled != null ? d.enabled : p.enabled;
-    const fields = p.type === 'antigravity'
-      ? '<div class="field"><span>Google account</span>' +
-        '<div class="row wrap" style="min-height:34px">' +
-        (p.hasKey
-          ? '<span class="badge free">signed in</span><span class="mono" style="font-size:12.5px">' + esc(p.keyHint || '') + '</span>' +
-            '<span class="grow"></span><button class="btn small" data-act="gsignout">Sign out</button>'
-          : '<button class="btn small primary" data-act="gsignin">Sign in with Google</button>' +
-            '<span class="muted" style="font-size:12px">opens a Google consent window</span>') +
-        '</div>' +
-        (!p.hasKey && !isLocalDashboard()
-          ? '<p class="muted" style="font-size:11.5px;margin:10px 0 6px">Running on a server: after approving, Google redirects to a <span class="mono">localhost</span> page that won\'t load. Copy that full URL from the address bar and paste it here.</p>' +
-            '<div class="row"><input class="input mono grow" data-act="gpaste" placeholder="http://localhost:3777/oauth2callback?state=...&code=..."><button class="btn small" data-act="gpaste-submit">Finish sign-in</button></div>'
-          : '') +
-        '</div>'
-      : '<label class="field"><span>Base URL</span><input class="input mono" data-act="baseUrl" value="' + esc(baseUrl) + '"></label>' +
-        '<label class="field"><span>API key</span><input class="input mono" data-act="apiKey" type="password" placeholder="' + (p.hasKey ? esc(p.keyHint) + ' (saved)' : 'paste key...') + '"></label>';
+    const fields =
+      '<label class="field"><span>Base URL</span><input class="input mono" data-act="baseUrl" value="' + esc(baseUrl) + '"></label>' +
+      '<label class="field"><span>API key</span><input class="input mono" data-act="apiKey" type="password" placeholder="' + (p.hasKey ? esc(p.keyHint) + ' (saved)' : 'paste key...') + '"></label>';
     return (
       '<div class="provider-card" data-pid="' + esc(p.id) + '">' +
       '<div class="head">' +
@@ -302,42 +284,6 @@ function renderProviders() {
           if (state.drafts[pid] && state.drafts[pid].apiKey) await saveProvidersQuiet(collectProviders());
           openModelsModal(pid);
         });
-      } else if (act === 'gsignin') {
-        node.addEventListener('click', async () => {
-          node.disabled = true;
-          try {
-            const j = await api('/api/google/login', { method: 'POST', body: {} });
-            window.open(j.url, '_blank', 'width=520,height=680');
-            toast('Complete the Google sign-in in the opened window');
-            pollGoogleStatus();
-          } catch (e) {
-            toast('Could not start Google sign-in: ' + e.message, 'err');
-            node.disabled = false;
-          }
-        });
-      } else if (act === 'gpaste-submit') {
-        node.addEventListener('click', async () => {
-          const input = card.querySelector('[data-act=gpaste]');
-          const url = input ? input.value.trim() : '';
-          if (!url) { toast('Paste the redirected URL first', 'err'); return; }
-          node.disabled = true;
-          try {
-            const r = await api('/api/google/callback', { method: 'POST', body: { url } });
-            await loadConfig();
-            toast('Google account connected' + (r.email ? ': ' + r.email : ''), 'ok');
-            renderProviders();
-          } catch (e) {
-            toast('Sign-in failed: ' + e.message, 'err');
-            node.disabled = false;
-          }
-        });
-      } else if (act === 'gsignout') {
-        node.addEventListener('click', async () => {
-          await api('/api/google/logout', { method: 'POST', body: {} });
-          await loadConfig();
-          toast('Signed out of Google', 'ok');
-          renderProviders();
-        });
       } else if (act === 'delete') {
         node.addEventListener('click', async () => {
           const providers = collectProviders().filter((p) => p.id !== pid);
@@ -367,33 +313,6 @@ function renderProviders() {
   };
 }
 
-function isLocalDashboard() {
-  return ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
-}
-
-let googlePollTimer = null;
-function pollGoogleStatus() {
-  if (googlePollTimer) clearInterval(googlePollTimer);
-  const startedAt = Date.now();
-  googlePollTimer = setInterval(async () => {
-    if (Date.now() - startedAt > 180000) {
-      clearInterval(googlePollTimer);
-      googlePollTimer = null;
-      return;
-    }
-    try {
-      const s = await api('/api/google/status');
-      if (s.authenticated) {
-        clearInterval(googlePollTimer);
-        googlePollTimer = null;
-        await loadConfig();
-        toast('Google account connected' + (s.email ? ': ' + s.email : ''), 'ok');
-        if (state.view === 'providers') renderProviders();
-      }
-    } catch (e) { }
-  }, 2000);
-}
-
 async function saveProvidersQuiet(providers) {
   const j = await api('/api/config', { method: 'PUT', body: { providers } });
   state.cfg = j;
@@ -404,7 +323,6 @@ function keyUrl(type) {
   switch (type) {
     case 'openrouter': return 'https://openrouter.ai/keys';
     case 'groq': return 'https://console.groq.com/keys';
-    case 'gemini': return 'https://aistudio.google.com/apikey';
     case 'opencode': return 'https://opencode.ai';
     default: return '';
   }
@@ -414,9 +332,7 @@ function providerHint(p) {
   switch (p.type) {
     case 'openrouter': return 'Get a free key at openrouter.ai/keys. Models ending in ":free" cost nothing.';
     case 'groq': return 'Free key at console.groq.com/keys. Very fast Llama models, generous free tier.';
-    case 'gemini': return 'Free key at aistudio.google.com/apikey. OpenAI-compatible endpoint is used.';
-    case 'github': return 'GitHub Models was retired by GitHub on July 30, 2026 - this provider no longer works. Remove it and use OpenRouter, Groq, Gemini or Antigravity instead.';
-    case 'antigravity': return 'No API key needed. Sign in with your Google account to use the free Antigravity / Gemini models (Gemini 3 Pro preview, 2.5 Pro, Flash) via Google\'s Code Assist quota.';
+    case 'github': return 'GitHub Models was retired by GitHub on July 30, 2026 - this provider no longer works. Remove it and use OpenRouter, Groq or OpenCode instead.';
     case 'opencode':
       return p.id === 'opencode-go'
         ? 'OpenCode Go subscription ($10/mo flat, dollar-metered). Same API key as Zen (opencode.ai console) with an active Go plan. Curated coding models: GLM, Kimi, DeepSeek, MiniMax and more.'
