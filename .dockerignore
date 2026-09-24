@@ -1,0 +1,10 @@
+node_modules
+dist
+data
+*.log
+.env
+.playwright-mcp
+.git
+.vscode
+Dockerfile
+.dockerignore

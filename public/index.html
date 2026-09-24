@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Token Route</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="logo">
+      <img src="logo.svg" alt="Token Route" class="logo-mark">
+      <div>
+        <div class="logo-name">Token Route</div>
+        <div class="logo-sub">free-model gateway</div>
+      </div>
+    </div>
+    <nav id="nav">
+      <button data-view="overview" class="active">Overview</button>
+      <button data-view="providers">Providers</button>
+      <button data-view="routing">Routing</button>
+      <button data-view="logs">Request Log</button>
+      <button data-view="playground">Playground</button>
+      <button data-view="settings">Settings</button>
+    </nav>
+    <div class="side-foot">
+      <span class="dot ok" id="side-dot"></span>
+      <span id="side-status-text">starting...</span>
+      <span class="muted" id="side-version"></span>
+    </div>
+  </aside>
+  <main class="main">
+    <section id="view-overview" class="view"></section>
+    <section id="view-providers" class="view hidden"></section>
+    <section id="view-routing" class="view hidden"></section>
+    <section id="view-logs" class="view hidden"></section>
+    <section id="view-playground" class="view hidden"></section>
+    <section id="view-settings" class="view hidden"></section>
+  </main>
+</div>
+<div id="toasts"></div>
+<div id="modal-root" class="overlay hidden"></div>
+<div id="unlock-root" class="overlay hidden"></div>
+<script src="app.js"></script>
+</body>
+</html>
