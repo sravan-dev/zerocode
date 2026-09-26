@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy Policy · ZeroCode</title>
+<link rel="icon" type="image/svg+xml" href="/zerocode/logo.svg">
+<link rel="stylesheet" href="/legal.css">
+</head>
+<body>
+<main>
+  <a class="brand" href="/"><img src="/zerocode/logo.svg" alt=""> ZeroCode</a>
+  <h1>Privacy Policy</h1>
+  <p class="updated">Last updated: 26 September 2026</p>
+
+  <p>ZeroCode is an AI model gateway and chat interface operated at <strong>zerocode.hellosravan.in</strong>. It forwards your chat requests to AI model providers that the operator has connected. This policy explains what data ZeroCode handles and why.</p>
+
+  <h2>Data we handle</h2>
+  <ul>
+    <li><strong>Chat messages.</strong> Your messages are sent to the AI provider selected for each request so it can generate a reply. ZeroCode does not store message content on the server. Your chat history is saved only in your own browser's local storage.</li>
+    <li><strong>Request logs.</strong> For each request the server keeps basic details: time, model used, token counts, response time and any error. It keeps only the most recent 500 entries, in memory, and clears them on restart. Message content is not logged.</li>
+    <li><strong>Google account data.</strong> If the operator connects a Google account through “Sign in with Google”, ZeroCode receives the account's email address and OAuth tokens. They are stored on the ZeroCode server and used only to call Google's model API for requests routed to it.</li>
+    <li><strong>Provider API keys and settings.</strong> Keys for connected AI providers are stored in the server's configuration so ZeroCode can call those providers.</li>
+  </ul>
+
+  <h2>Google user data</h2>
+  <p>ZeroCode requests the <code>openid</code>, <code>email</code> and <code>https://www.googleapis.com/auth/cloud-platform</code> scopes. It uses them only to identify the connected account and to send model requests to Google's Code Assist API on that account's behalf. ZeroCode does not sell Google user data, use it for advertising, or share it with anyone else, except as needed to send your requests to Google.</p>
+  <p>ZeroCode's use and transfer of information received from Google APIs adheres to the <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>, including the Limited Use requirements.</p>
+
+  <h2>Third-party AI providers</h2>
+  <p>Requests are processed by the AI providers the operator has connected, such as Google, Groq or OpenRouter. Each provider handles your data under its own privacy policy.</p>
+
+  <h2>Cookies and tracking</h2>
+  <p>ZeroCode uses no advertising or analytics cookies. Your browser's local storage keeps your chats, settings and theme on your device.</p>
+
+  <h2>Retention and deletion</h2>
+  <p>Chats stay in your browser until you delete them or clear your browser's site data. Google tokens are deleted when the operator chooses “Remove connector”. You can also revoke ZeroCode's access at any time at <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>.</p>
+
+  <h2>Security</h2>
+  <p>Traffic to ZeroCode is encrypted with HTTPS. The API and dashboard are protected by an access key. Stored credentials are kept in files readable only by the ZeroCode service.</p>
+
+  <h2>Changes</h2>
+  <p>If this policy changes, the updated version will be posted on this page with a new date.</p>
+
+  <h2>Contact</h2>
+  <p>Questions or deletion requests: <a href="mailto:msravan328@gmail.com">msravan328@gmail.com</a></p>
+
+  <footer><a href="/terms">Terms of Service</a> · <a href="/">ZeroCode</a></footer>
+</main>
+</body>
+</html>

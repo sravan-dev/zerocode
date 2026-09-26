@@ -73,6 +73,9 @@ export function createApp(deps: ServerDeps): express.Express {
     if (req.path.endsWith('/')) return res.redirect(301, '/dashboard');
     res.sendFile(path.join(publicDir, 'index.html'));
   });
+  // Public legal pages linked from the Google OAuth consent screen.
+  app.get('/privacy', (_req, res) => res.sendFile(path.join(publicDir, 'privacy.html')));
+  app.get('/terms', (_req, res) => res.sendFile(path.join(publicDir, 'terms.html')));
 
   app.use(express.static(publicDir, { index: false }));
   app.use('/zerocode', express.static(path.join(publicDir, 'zerocode')));
