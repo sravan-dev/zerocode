@@ -9,6 +9,8 @@ export interface UserDoc {
   name: string;
   passwordHash?: string;
   googleSub?: string;
+  /** True once ownership of the email is proven (Google sign-in) or an admin created the account. */
+  emailVerified?: boolean;
   role: Role;
   status: UserStatus;
   createdAt: Date;

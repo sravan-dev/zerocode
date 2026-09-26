@@ -73,6 +73,8 @@ function superAdmins(): Set<string> {
   return new Set((process.env.SUPER_ADMIN_EMAILS || '').split(',').map(normEmail).filter(Boolean));
 }
 const isSuperAdmin = (email: string) => superAdmins().has(email);
+/** A verified super-admin account: cannot be demoted, disabled or deleted. */
+const isProtected = (u: UserDoc) => !!u.emailVerified && isSuperAdmin(u.email);
 
 function parseCookies(req: Request): Record<string, string> {
   const out: Record<string, string> = {};
@@ -124,9 +126,12 @@ async function startSession(req: Request, res: Response, user: UserDoc): Promise
   setCookie(req, res, SESSION_COOKIE, token, SESSION_DAYS * 86400);
 }
 
-/** Super-admin emails always hold the admin role, so they can't be locked out by a demotion. */
+/**
+ * Super-admin emails always hold the admin role, so they can't be locked out by a demotion.
+ * Only once the email is verified: anyone can register any address with a password.
+ */
 async function ensureRole(user: UserDoc): Promise<UserDoc> {
-  if (isSuperAdmin(user.email) && (user.role !== 'admin' || user.status !== 'active')) {
+  if (user.emailVerified && isSuperAdmin(user.email) && (user.role !== 'admin' || user.status !== 'active')) {
     await users().updateOne({ _id: user._id }, { $set: { role: 'admin', status: 'active' } });
     return { ...user, role: 'admin', status: 'active' };
   }
@@ -218,7 +223,9 @@ export function mountAuth(app: Express): void {
       email,
       name: cleanName(req.body?.name, email),
       passwordHash: await hashPassword(password),
-      role: isSuperAdmin(email) ? 'admin' : 'user',
+      // Self-registered emails are unverified, so never admin here (see ensureRole).
+      emailVerified: false,
+      role: 'user',
       status: 'active',
       createdAt: new Date()
     };
@@ -312,13 +319,23 @@ export function mountAuth(app: Express): void {
           email,
           name: cleanName(claims.name, email),
           googleSub: sub,
+          emailVerified: true,
           role: isSuperAdmin(email) ? 'admin' : 'user',
           status: 'active',
           createdAt: new Date()
         };
         await users().insertOne(user);
+      } else if (!user.emailVerified) {
+        // Someone registered this email with a password without proving they own it. Google just
+        // proved ownership, so the real owner takes the account over: drop the unverified password
+        // and sign out every session it created.
+        await users().updateOne(
+          { _id: user._id },
+          { $set: { googleSub: sub, emailVerified: true, role: 'user' }, $unset: { passwordHash: '' } }
+        );
+        await sessions().deleteMany({ userId: user._id });
+        user = { ...user, googleSub: sub, emailVerified: true, role: 'user', passwordHash: undefined };
       } else if (!user.googleSub) {
-        // Google verified this email, so link it to the existing password account.
         await users().updateOne({ _id: user._id }, { $set: { googleSub: sub } });
         user.googleSub = sub;
       }
@@ -382,7 +399,7 @@ export function mountAuth(app: Express): void {
     const counts = await chats().aggregate<{ _id: ObjectId; n: number }>([{ $group: { _id: '$userId', n: { $sum: 1 } } }]).toArray();
     const byUser = new Map(counts.map((c) => [c._id.toHexString(), c.n]));
     res.json({
-      users: list.map((u) => ({ ...publicUser(u), chats: byUser.get(u._id.toHexString()) || 0, superAdmin: isSuperAdmin(u.email) })),
+      users: list.map((u) => ({ ...publicUser(u), chats: byUser.get(u._id.toHexString()) || 0, superAdmin: isProtected(u) })),
       total: await users().countDocuments()
     });
   });
@@ -398,6 +415,8 @@ export function mountAuth(app: Express): void {
       email,
       name: cleanName(req.body?.name, email),
       passwordHash: await hashPassword(password),
+      // An admin vouches for accounts they create.
+      emailVerified: true,
       role: isSuperAdmin(email) ? 'admin' : role,
       status: 'active',
       createdAt: new Date()
@@ -420,11 +439,11 @@ export function mountAuth(app: Express): void {
     const set: Partial<UserDoc> = {};
     if (typeof body.name === 'string') set.name = cleanName(body.name, target.email);
     if (body.role === 'admin' || body.role === 'user') {
-      if (body.role !== 'admin' && (self || isSuperAdmin(target.email))) return res.status(400).json({ error: "You can't remove admin rights from this account." });
+      if (body.role !== 'admin' && (self || isProtected(target))) return res.status(400).json({ error: "You can't remove admin rights from this account." });
       set.role = body.role;
     }
     if (body.status === 'active' || body.status === 'blocked') {
-      if (body.status === 'blocked' && (self || isSuperAdmin(target.email))) return res.status(400).json({ error: "You can't disable this account." });
+      if (body.status === 'blocked' && (self || isProtected(target))) return res.status(400).json({ error: "You can't disable this account." });
       set.status = body.status;
     }
     if (typeof body.password === 'string' && body.password) {
@@ -443,7 +462,7 @@ export function mountAuth(app: Express): void {
     const _id = idOf(req.params.id);
     const target = _id && (await users().findOne({ _id }));
     if (!target) return res.status(404).json({ error: 'User not found' });
-    if (target._id.toHexString() === req.user!.id || isSuperAdmin(target.email)) return res.status(400).json({ error: "You can't delete this account." });
+    if (target._id.toHexString() === req.user!.id || isProtected(target)) return res.status(400).json({ error: "You can't delete this account." });
     await Promise.all([
       users().deleteOne({ _id: target._id }),
       sessions().deleteMany({ userId: target._id }),

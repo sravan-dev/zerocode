@@ -43,7 +43,7 @@ On **Coolify**: create a resource from this repo, choose the **Dockerfile** buil
 | `GOOGLE_OAUTH_CLIENT_SECRET` | unset | Optional Google OAuth client secret for Antigravity |
 | `GOOGLE_CLOUD_PROJECT` | unset | Optional existing Cloud project for Code Assist accounts that require one |
 | `MONGODB_URI` | unset | Turns on user accounts (sign-in page, per-user chat history, `/manage` admin portal), e.g. `mongodb://mongo:27017/zerocode`. Without it ZeroCode runs single-user. |
-| `SUPER_ADMIN_EMAILS` | unset | Comma-separated emails that always get the admin role when they register or sign in |
+| `SUPER_ADMIN_EMAILS` | unset | Comma-separated emails that always get the admin role once the email is verified (first **Continue with Google** sign-in). Registering the email with a password alone does not grant admin. |
 | `PUBLIC_URL` | unset | Public base URL for hosted deployments; Google sign-in redirects to `<PUBLIC_URL>/oauth2callback` instead of `http://localhost:<PORT>/oauth2callback` |
 
 Locally, you can put these in a `.env` file in the project root (see `.env.example`); it is loaded at startup and excluded from git and the Docker image.
