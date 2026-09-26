@@ -173,7 +173,9 @@ export function beginLogin(port: number): { url: string } {
   const state = randomBytes(24).toString('hex');
   const verifier = randomBytes(32).toString('base64url');
   const challenge = createHash('sha256').update(verifier).digest('base64url');
-  const redirectUri = `http://localhost:${port}${OAUTH_CALLBACK_PATH}`;
+  // PUBLIC_URL lets hosted deployments receive the callback on their own domain.
+  const base = process.env.PUBLIC_URL?.trim().replace(/\/+$/, '') || `http://localhost:${port}`;
+  const redirectUri = `${base}${OAUTH_CALLBACK_PATH}`;
   pendingStates.set(state, { redirectUri, verifier, createdAt: now });
   const params = new URLSearchParams({
     client_id: client.id,

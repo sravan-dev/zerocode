@@ -42,6 +42,7 @@ On **Coolify**: create a resource from this repo, choose the **Dockerfile** buil
 | `GOOGLE_OAUTH_CLIENT_ID` | unset | Optional Google OAuth client ID for Antigravity |
 | `GOOGLE_OAUTH_CLIENT_SECRET` | unset | Optional Google OAuth client secret for Antigravity |
 | `GOOGLE_CLOUD_PROJECT` | unset | Optional existing Cloud project for Code Assist accounts that require one |
+| `PUBLIC_URL` | unset | Public base URL for hosted deployments; Google sign-in redirects to `<PUBLIC_URL>/oauth2callback` instead of `http://localhost:<PORT>/oauth2callback` |
 
 Locally, you can put these in a `.env` file in the project root (see `.env.example`); it is loaded at startup and excluded from git and the Docker image.
 
