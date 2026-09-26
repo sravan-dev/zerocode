@@ -466,7 +466,7 @@ kbd {
 .dlg .cx-search:focus-within { border-color: var(--accent); }
 .dlg .cx-search svg { width: 16px; height: 16px; }
 .dlg .cx-search input { flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; border-radius: 0; outline: 0; background: none; color: var(--text); font-size: 13.5px; }
-.cx-none { padding: 14px 8px; font-size: 13px; color: var(--muted); }
+.cx-prov { display: block; margin-top: 2px; font: 11.5px/1.3 system-ui, sans-serif; color: var(--muted); }
 @media (max-width: 640px) { .cx-top { flex-wrap: wrap; } .dlg .cx-search { order: 3; width: 100%; } }
 .cx-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 290px minmax(0, 1fr); }
 .cx-side { overflow-y: auto; padding: 12px; border-right: 1px solid var(--border); background: var(--surface-2); }

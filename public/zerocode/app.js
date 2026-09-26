@@ -1150,27 +1150,25 @@
       : !providers.some((p) => p.id === c.key));
 
     const q = conn.search.trim().toLowerCase();
-    const hit = (...s) => !q || s.some((x) => (x || '').toLowerCase().includes(q));
-    const shownProviders = providers.map((p, i) => ({ p, i })).filter(({ p }) => hit(p.name, p.id, p.baseUrl));
-    const shownAvailable = available.filter((c) => hit(c.name, c.desc));
 
     side.innerHTML = `
-      <div class="cx-label">Connected <span class="muted">(${q ? `${shownProviders.length} of ` : ''}${providers.length})</span></div>
-      ${shownProviders.map(({ p, i }) => {
+      <div class="cx-label">Connected <span class="muted">(${providers.length})</span></div>
+      ${providers.map((p, i) => {
         const [tone, label] = providerStatus(p);
         const n = routeCount(p.id);
-        return `<button class="cx-item${p.id === conn.sel ? ' sel' : ''}" data-sel="${esc(p.id)}">
+        return `<button class="cx-item${p.id === conn.sel && !q ? ' sel' : ''}" data-sel="${esc(p.id)}">
           <span class="cx-av ${TONES[i % TONES.length]}">${esc(p.name.charAt(0).toUpperCase())}</span>
           <span class="cx-txt"><b>${esc(p.name)}</b><small>${n} model${n === 1 ? '' : 's'} on route</small></span>
           <span class="pill ${tone}">${label}</span>
         </button>`;
       }).join('')}
-      ${shownAvailable.length ? `<div class="cx-label">Add connector</div>` : ''}
-      ${shownAvailable.map((c) => `<button class="cx-item add" data-add="${c.key}" ${conn.busy ? 'disabled' : ''}>
+      <div class="cx-label">Add connector</div>
+      ${available.map((c) => `<button class="cx-item add" data-add="${c.key}" ${conn.busy ? 'disabled' : ''}>
           <span class="cx-av plus">${ICON.plus}</span>
           <span class="cx-txt"><b>${esc(c.name)}</b><small>${esc(c.desc)}</small></span>
-        </button>`).join('')}
-      ${q && !shownProviders.length && !shownAvailable.length ? `<div class="cx-none">No connectors match “${esc(conn.search.trim())}”.</div>` : ''}`;
+        </button>`).join('')}`;
+
+    if (q) { main.innerHTML = connSearchHtml(q); return; }
 
     const p = providers.find((x) => x.id === conn.sel);
     if (!p) {
@@ -1182,6 +1180,47 @@
       return;
     }
     main.innerHTML = connDetailHtml(p);
+  }
+
+  // Header search: matching models from every connected provider, with Test and Add.
+  function connSearchHtml(q) {
+    const ready = conn.cfg.providers.filter((p) => providerStatus(p)[0] === 'ok');
+    const loading = ready.filter((p) => !conn.models[p.id] || conn.models[p.id].loading);
+    const failed = ready.filter((p) => conn.models[p.id] && conn.models[p.id].error);
+    const hits = [];
+    for (const p of ready) {
+      const m = conn.models[p.id];
+      if (!m || !m.list) continue;
+      const onRoute = new Set(conn.cfg.route.filter((c) => c.provider === p.id).map((c) => c.model));
+      for (const x of m.list) {
+        if (x.chat === false || (conn.freeOnly && !x.free) || !x.id.toLowerCase().includes(q)) continue;
+        hits.push({ p, x, on: onRoute.has(x.id) });
+      }
+    }
+    const dis = conn.busy ? 'disabled' : '';
+    const rows = hits.slice(0, 300).map(({ p, x, on }) => {
+      const k = candKey({ provider: p.id, model: x.id });
+      const t = mv.tests[k];
+      return `<div class="cx-model">
+        <span class="cx-mid">${esc(x.id)}<small class="cx-prov">${esc(p.name)}</small></span>
+        ${x.free ? '<span class="pill ok">Free</span>' : ''}
+        ${connTestPill(t)}
+        <button class="btn sm ghost cx-test" data-test-model="${esc(k)}" ${t?.running ? 'disabled' : ''}>${t?.running ? 'Testing…' : 'Test'}</button>
+        <button class="btn sm ${on ? 'on' : 'ghost'}" data-route="${esc(x.id)}" data-pid="${esc(p.id)}" ${dis}>${on ? '✓ On route' : 'Add'}</button>
+      </div>`;
+    }).join('');
+    const status = [
+      loading.length ? `Loading ${loading.map((p) => p.name).join(', ')}…` : '',
+      failed.length ? `Couldn't load ${failed.map((p) => p.name).join(', ')}.` : ''
+    ].filter(Boolean).join(' ');
+    return `
+      <div class="cx-head"><div>
+        <h4>Search models</h4>
+        <p class="muted">${hits.length} match${hits.length === 1 ? '' : 'es'} for “${esc(conn.search.trim())}” across ${ready.length} connected provider${ready.length === 1 ? '' : 's'}${hits.length > 300 ? ' · showing 300' : ''}.</p>
+      </div>
+      <label class="check"><input type="checkbox" id="cx-free" ${conn.freeOnly ? 'checked' : ''}> Free only</label></div>
+      ${status ? `<div class="cx-note">${esc(status)}</div>` : ''}
+      ${rows ? `<div class="cx-models">${rows}</div>` : (loading.length ? '' : '<div class="cx-note">No models match.</div>')}`;
   }
 
   function connVisibleModels(m) {
@@ -1503,8 +1542,7 @@
     });
   }
 
-  function toggleRoute(model) {
-    const pid = conn.sel;
+  function toggleRoute(model, pid = conn.sel) {
     const route = conn.cfg.route.slice();
     const i = route.findIndex((c) => c.provider === pid && c.model === model);
     if (i === -1) route.push({ provider: pid, model });
@@ -1523,14 +1561,26 @@
       const add = e.target.closest('[data-add]');
       if (add) { addConnector(add.dataset.add); return; }
       const sel = e.target.closest('[data-sel]');
-      if (sel) { conn.sel = sel.dataset.sel; conn.filter = ''; renderConn(); autoLoadModels(conn.sel); }
+      if (sel) {
+        conn.sel = sel.dataset.sel;
+        conn.filter = '';
+        conn.search = '';
+        $('cx-search').value = '';
+        renderConn();
+        autoLoadModels(conn.sel);
+      }
     });
-    $('cx-search').addEventListener('input', (e) => { conn.search = e.target.value; renderConn(); });
+    $('cx-search').addEventListener('input', (e) => {
+      conn.search = e.target.value;
+      renderConn();
+      // Searching needs every connected provider's list; fetch any not loaded yet.
+      if (conn.search.trim() && conn.cfg) conn.cfg.providers.forEach((p) => autoLoadModels(p.id));
+    });
     const main = $('cx-main');
     main.addEventListener('submit', (e) => { e.preventDefault(); saveConnector(e.target); });
     main.addEventListener('click', (e) => {
       const r = e.target.closest('[data-route]');
-      if (r) { toggleRoute(r.dataset.route); return; }
+      if (r) { toggleRoute(r.dataset.route, r.dataset.pid || conn.sel); return; }
       const tb = e.target.closest('[data-test-model]');
       if (tb) {
         const k = tb.dataset.testModel;
