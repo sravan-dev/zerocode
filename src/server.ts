@@ -23,7 +23,7 @@ export function createApp(deps: ServerDeps): express.Express {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Authorization,Content-Type,x-api-key,x-requested-with,x-opencode-session');
-    res.setHeader('Access-Control-Expose-Headers', 'x-zerocode-candidate,x-zerocode-provider');
+    res.setHeader('Access-Control-Expose-Headers', 'x-zerocode-candidate,x-zerocode-provider,x-zerocode-fallback');
     if (req.method === 'OPTIONS') {
       res.status(204).end();
       return;

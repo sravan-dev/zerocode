@@ -158,8 +158,16 @@ export function createProxyHandlers(deps: ProxyDeps) {
 
     let lastError = 'unknown';
     let attempts = 0;
+    // Why the pinned model didn't answer, reported to the client when another model does.
+    let pinnedFail = pinned && !usable.includes(pinned) ? 'cooling down after recent errors, or unavailable' : '';
+    const flagFallback = (cand: RouteCandidate) => {
+      if (!pinned || cand === pinned) return;
+      const note = `${pinned.provider}/${pinned.model}: ${pinnedFail || 'unavailable'}`.slice(0, 300);
+      res.set('x-zerocode-fallback', encodeURIComponent(note));
+    };
 
-    for (const cand of usable) {
+    for (const [idx, cand] of usable.entries()) {
+      if (idx > 0 && usable[idx - 1] === pinned) pinnedFail = lastError;
       attempts++;
       const p = cfg.providers.find((x) => x.id === cand.provider);
       if (!p) continue;
@@ -236,6 +244,7 @@ export function createProxyHandlers(deps: ProxyDeps) {
           attempts,
           error: undefined
         });
+        flagFallback(cand);
         res.set('x-zerocode-candidate', label);
         res.set('x-zerocode-provider', p.name);
         res.status(200).json(json);
@@ -284,6 +293,7 @@ export function createProxyHandlers(deps: ProxyDeps) {
       res.set('cache-control', 'no-cache');
       res.set('connection', 'keep-alive');
       res.set('x-accel-buffering', 'no');
+      flagFallback(cand);
       res.set('x-zerocode-candidate', label);
       res.set('x-zerocode-provider', p.name);
       const nodeStream = r.body instanceof Readable ? r.body : Readable.fromWeb(r.body as any);

@@ -340,7 +340,8 @@
           ${isLast ? `<button data-retry>${ICON.retry}Retry</button>` : ''}
           ${m.model ? `<span>${esc(m.model)}</span>` : ''}
           ${m.truncated && m.content ? '<span class="warn-txt">Cut off at the output limit</span>' : ''}
-        </div>`
+        </div>
+        ${m.fallback ? `<div class="fallback-note" title="${esc(m.fallback)}">Your chosen model didn't answer (${esc(m.fallback.slice(0, 160))}), so a working model replied instead.</div>` : ''}`
       : '';
     return `<div class="msg assistant" data-i="${i}"><div class="av"><img src="logo.svg" alt=""></div><div class="body">${body}${meta}</div></div>`;
   }
@@ -809,6 +810,8 @@
       });
       const via = res.headers.get('x-zerocode-candidate');
       if (via) reply.model = via;
+      const fellBack = res.headers.get('x-zerocode-fallback');
+      if (fellBack) { try { reply.fallback = decodeURIComponent(fellBack); } catch { reply.fallback = fellBack; } }
 
       if (!res.ok) {
         let msg = `HTTP ${res.status}`;
