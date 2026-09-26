@@ -4,7 +4,10 @@ import { listAntigravityModels } from './antigravity';
 export interface UpstreamModel {
   id: string;
   name?: string;
+  /** true = free, false = paid, undefined = unknown. */
   free?: boolean;
+  /** USD per 1M input / output tokens, when the provider publishes it. */
+  price?: { in: number; out: number };
   /** false for models that can't serve /chat/completions (speech, TTS, embeddings, classifiers, image gen). */
   chat?: boolean;
   context?: number;
@@ -35,11 +38,23 @@ export function isChatModel(m: any): boolean {
   return !NON_CHAT_ID.test(id);
 }
 
-function isFreeModel(m: any): boolean {
+/** true = free, false = paid, undefined = the provider doesn't publish pricing. */
+function isFreeModel(m: any): boolean | undefined {
   if (typeof m?.id === 'string' && (m.id.endsWith(':free') || m.id.endsWith('-free'))) return true;
+  const price = modelPrice(m);
+  if (!price) return undefined;
+  return price.in === 0 && price.out === 0;
+}
+
+/** USD per 1M tokens, from OpenRouter-style per-token pricing. */
+function modelPrice(m: any): { in: number; out: number } | undefined {
   const pr = m?.pricing;
-  if (pr && Number(pr.prompt) === 0 && Number(pr.completion) === 0) return true;
-  return false;
+  if (!pr) return undefined;
+  const pin = Number(pr.prompt);
+  const pout = Number(pr.completion);
+  // Negative prices mark router/variable-priced entries (e.g. openrouter/auto).
+  if (!Number.isFinite(pin) || !Number.isFinite(pout) || pin < 0 || pout < 0) return undefined;
+  return { in: pin * 1e6, out: pout * 1e6 };
 }
 
 export async function listUpstreamModels(p: ProviderConfig, timeoutMs = 15000): Promise<UpstreamModel[]> {
@@ -65,6 +80,7 @@ export async function listUpstreamModels(p: ProviderConfig, timeoutMs = 15000): 
         id,
         name: typeof m?.display_name === 'string' ? m.display_name : undefined,
         free: isFreeModel(m),
+        price: modelPrice(m),
         chat: isChatModel(m),
         context:
           typeof m?.context_length === 'number'

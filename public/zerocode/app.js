@@ -1182,6 +1182,17 @@
     main.innerHTML = connDetailHtml(p);
   }
 
+  // Free / Paid (with $ per 1M tokens when known) / unknown, for a listed model.
+  function priceTag(x) {
+    if (x.free === true) return '<span class="pill ok">Free</span>';
+    if (x.free === false) {
+      const fmt = (n) => '$' + (n >= 10 ? n.toFixed(0) : n >= 1 ? n.toFixed(2).replace(/\.00$/, '') : n >= 0.001 ? n.toFixed(3).replace(/0+$/, '').replace(/\.$/, '') : n.toPrecision(2));
+      const detail = x.price ? `${fmt(x.price.in)} in · ${fmt(x.price.out)} out per 1M tokens` : '';
+      return `<span class="pill warn" title="${esc(detail)}">Paid${x.price ? ' · ' + fmt(x.price.in) + '/' + fmt(x.price.out) : ''}</span>`;
+    }
+    return '<span class="pill off" title="This provider does not publish per-model pricing. Check its plan or free-tier limits.">Price unknown</span>';
+  }
+
   // Header search: matching models from every connected provider, with Test and Add.
   function connSearchHtml(q) {
     const ready = conn.cfg.providers.filter((p) => providerStatus(p)[0] === 'ok');
@@ -1203,7 +1214,7 @@
       const t = mv.tests[k];
       return `<div class="cx-model">
         <span class="cx-mid">${esc(x.id)}<small class="cx-prov">${esc(p.name)}</small></span>
-        ${x.free ? '<span class="pill ok">Free</span>' : ''}
+        ${priceTag(x)}
         ${connTestPill(t)}
         <button class="btn sm ghost cx-test" data-test-model="${esc(k)}" ${t?.running ? 'disabled' : ''}>${t?.running ? 'Testing…' : 'Test'}</button>
         <button class="btn sm ${on ? 'on' : 'ghost'}" data-route="${esc(x.id)}" data-pid="${esc(p.id)}" ${dis}>${on ? '✓ On route' : 'Add'}</button>
@@ -1286,7 +1297,7 @@
             const k = candKey({ provider: p.id, model: x.id });
             return `<div class="cx-model">
               <span class="cx-mid">${esc(x.id)}</span>
-              ${x.free ? '<span class="pill ok">Free</span>' : ''}
+              ${priceTag(x)}
               ${x.context ? `<span class="muted cx-ctx">${fmtNum(x.context)} ctx</span>` : ''}
               ${connTestPill(mv.tests[k])}
               <button class="btn sm ghost cx-test" data-test-model="${esc(k)}" ${mv.tests[k]?.running ? 'disabled' : ''}>${mv.tests[k]?.running ? 'Testing…' : 'Test'}</button>
