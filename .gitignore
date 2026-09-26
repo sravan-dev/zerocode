@@ -8,3 +8,7 @@ data/
 # stray screenshots
 bug/
 w1.png
+
+# Local SSH helper (contains credentials)
+ssh.bat
+plink.exe
