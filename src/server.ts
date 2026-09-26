@@ -7,7 +7,7 @@ import { createProxyHandlers } from './proxy';
 import { mountAdmin } from './admin-api';
 import { handleCallback, OAUTH_CALLBACK_PATH } from './google-auth';
 import { dbEnabled } from './db';
-import { loadUser, mountAuth } from './auth';
+import { loadUser, mountAuth, safeNext } from './auth';
 
 export interface ServerDeps {
   getConfig(): AppConfig;
@@ -86,7 +86,7 @@ export function createApp(deps: ServerDeps): express.Express {
   if (accounts) {
     app.get('/', (req, res) => res.redirect(302, req.user ? '/zerocode/' : '/login'));
     app.get('/login', (req, res) => {
-      if (req.user) return res.redirect(302, typeof req.query.next === 'string' && req.query.next.startsWith('/') && !req.query.next.startsWith('//') ? req.query.next : '/zerocode/');
+      if (req.user) return res.redirect(302, safeNext(req.query.next));
       res.sendFile(path.join(publicDir, 'login.html'));
     });
     // The chat app needs a session; /manage is the super admin portal inside it.

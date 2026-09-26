@@ -5,7 +5,8 @@
   const params = new URLSearchParams(location.search);
   const next = (() => {
     const n = params.get('next') || '';
-    return n.startsWith('/') && !n.startsWith('//') ? n : '/zerocode/';
+    // Same-site paths only; "\" counts as "/" in browsers, so "/\evil.com" is rejected too.
+    return n.startsWith('/') && !n.startsWith('//') && !n.includes('\\') && !/[\x00-\x1f]/.test(n) ? n : '/zerocode/';
   })();
   let mode = 'login';
 

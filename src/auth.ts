@@ -99,10 +99,13 @@ function publicBase(req: Request): string {
   return `${isHttps(req) ? 'https' : 'http'}://${req.headers.host}`;
 }
 
-/** Only same-site relative paths, so a login link can't bounce users to another site. */
-function safeNext(v: unknown): string {
+/**
+ * Only same-site relative paths, so a login link can't bounce users to another site.
+ * Browsers treat "\" like "/", so "/\evil.com" would act as "//evil.com": reject any backslash.
+ */
+export function safeNext(v: unknown): string {
   const s = typeof v === 'string' ? v : '';
-  return s.startsWith('/') && !s.startsWith('//') && !s.startsWith('/\\') ? s : '/zerocode/';
+  return s.startsWith('/') && !s.startsWith('//') && !s.includes('\\') && !/[\x00-\x1f]/.test(s) ? s : '/zerocode/';
 }
 
 const sha256 = (s: string) => createHash('sha256').update(s).digest('hex');
