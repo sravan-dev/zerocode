@@ -1065,7 +1065,7 @@
   ];
   const TONES = ['tone-sky', 'tone-amber', 'tone-lime', 'tone-rose'];
 
-  const conn = { cfg: null, sel: null, models: {}, test: {}, filter: '', freeOnly: false, busy: false, error: '' };
+  const conn = { cfg: null, sel: null, models: {}, test: {}, filter: '', freeOnly: false, busy: false, error: '', testing: null };
 
   function catalogFor(p) {
     return CATALOG.find((c) => c.key === p.id) || CATALOG.find((c) => c.baseUrl && c.baseUrl === p.baseUrl) || CATALOG.find((c) => c.key === p.type);
@@ -1162,6 +1162,36 @@
     main.innerHTML = connDetailHtml(p);
   }
 
+  function connVisibleModels(m) {
+    const q = conn.filter.toLowerCase();
+    return m.list.filter((x) => x.chat !== false && (!conn.freeOnly || x.free) && (!q || x.id.toLowerCase().includes(q)));
+  }
+
+  // Test every model currently shown (after filter / Free only), three at a time.
+  async function testAllConnModels() {
+    const pid = conn.sel;
+    const m = conn.models[pid];
+    if (conn.testing || !m || !m.list) return;
+    const keys = connVisibleModels(m).slice(0, 300).map((x) => candKey({ provider: pid, model: x.id }));
+    if (!keys.length) return;
+    if (keys.length > 20 && !confirm(`Test ${keys.length} models? Each test sends one small request and may use quota.`)) return;
+    conn.testing = { done: 0, total: keys.length };
+    renderConn();
+    const queue = keys.slice();
+    const worker = async () => {
+      while (queue.length) {
+        await testModel(queue.shift());
+        conn.testing.done++;
+        renderConn();
+      }
+    };
+    await Promise.all([worker(), worker(), worker()]);
+    const failed = keys.filter((k) => !mv.tests[k]?.ok).length;
+    conn.testing = null;
+    renderConn();
+    toast(failed ? `${keys.length - failed} passed, ${failed} failed` : `All ${keys.length} models passed`);
+  }
+
   function connTestPill(t) {
     if (!t || t.running) return '';
     return t.ok
@@ -1188,8 +1218,7 @@
     } else if (m.error) {
       modelsHtml = `<div class="cx-note err">${esc(m.error)}</div>`;
     } else {
-      const q = conn.filter.toLowerCase();
-      const list = m.list.filter((x) => x.chat !== false && (!conn.freeOnly || x.free) && (!q || x.id.toLowerCase().includes(q)));
+      const list = connVisibleModels(m);
       modelsHtml = list.length
         ? `<div class="cx-models">${list.slice(0, 300).map((x) => {
             const on = onRoute.has(x.id);
@@ -1266,7 +1295,8 @@
         <div class="cx-sub">Models <span class="muted">(${onRoute.size} on route)</span></div>
         <div class="cx-tools">
           ${m && m.list ? `<input type="search" id="cx-filter" placeholder="Filter" value="${esc(conn.filter)}">
-          <label class="check"><input type="checkbox" id="cx-free" ${conn.freeOnly ? 'checked' : ''}> Free only</label>` : ''}
+          <label class="check"><input type="checkbox" id="cx-free" ${conn.freeOnly ? 'checked' : ''}> Free only</label>
+          <button class="btn ghost sm" id="cx-test-all" ${conn.testing ? 'disabled' : ''}>${conn.testing ? `Testing ${conn.testing.done}/${conn.testing.total}…` : 'Test all'}</button>` : ''}
           <button class="btn ghost sm" id="cx-load" ${dis}>${m && m.list ? 'Reload' : 'Load models'}</button>
         </div>
       </div>
@@ -1491,6 +1521,7 @@
         return;
       }
       if (e.target.closest('#cx-load')) loadProviderModels(conn.sel);
+      else if (e.target.closest('#cx-test-all')) testAllConnModels();
       else if (e.target.closest('#cx-remove')) removeConnector();
       else if (e.target.closest('#cx-google-login')) startGoogleLogin();
       else if (e.target.closest('#cx-google-client-save')) saveGoogleOAuthClient();
