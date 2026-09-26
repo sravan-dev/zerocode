@@ -42,9 +42,20 @@ On **Coolify**: create a resource from this repo, choose the **Dockerfile** buil
 | `GOOGLE_OAUTH_CLIENT_ID` | unset | Optional Google OAuth client ID for Antigravity |
 | `GOOGLE_OAUTH_CLIENT_SECRET` | unset | Optional Google OAuth client secret for Antigravity |
 | `GOOGLE_CLOUD_PROJECT` | unset | Optional existing Cloud project for Code Assist accounts that require one |
+| `MONGODB_URI` | unset | Turns on user accounts (sign-in page, per-user chat history, `/manage` admin portal), e.g. `mongodb://mongo:27017/zerocode`. Without it ZeroCode runs single-user. |
+| `SUPER_ADMIN_EMAILS` | unset | Comma-separated emails that always get the admin role when they register or sign in |
 | `PUBLIC_URL` | unset | Public base URL for hosted deployments; Google sign-in redirects to `<PUBLIC_URL>/oauth2callback` instead of `http://localhost:<PORT>/oauth2callback` |
 
 Locally, you can put these in a `.env` file in the project root (see `.env.example`); it is loaded at startup and excluded from git and the Docker image.
+
+### User accounts
+
+With `MONGODB_URI` set, ZeroCode becomes a multi-user app:
+
+- `/login` offers email + password sign-in, registration, and **Continue with Google**. Google sign-in reuses the OAuth client saved for the Antigravity connector (scopes `openid email profile` only); add `<PUBLIC_URL>/auth/google/callback` as an authorized redirect URI on that client.
+- Signed-in users get a minimal chat: model picker, chat and history. Their chats are stored in MongoDB, not the browser.
+- Admins (anyone listed in `SUPER_ADMIN_EMAILS`, or promoted by an admin) also see Connectors, Models, Gateway, Projects and Templates, plus **Users** at `/manage`, where they can create, promote, disable, reset or delete accounts.
+- `/v1` accepts either a signed-in session or the `ZEROCODE_PROXY_KEY`, so editors and scripts keep working with the key.
 
 ### Google Antigravity connector
 

@@ -51,6 +51,12 @@ function oauthClient(): { id: string; secret: string } {
   return { id: client.id, secret: client.secret };
 }
 
+/** The saved Google OAuth client, reused for "Sign in with Google" on the login page. */
+export function googleOAuthClient(): { id: string; secret: string } | null {
+  const client = resolvedOAuthClient();
+  return client.id && client.secret ? { id: client.id, secret: client.secret } : null;
+}
+
 export function googleOAuthConfigured(): boolean {
   const client = resolvedOAuthClient();
   return !!(client.id && client.secret);

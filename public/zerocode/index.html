@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-role="user">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -42,12 +42,12 @@
         <span class="nav-ico accent"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span>
         New chat
       </button>
-      <button data-view="projects">
+      <button data-view="projects" class="admin-only">
         <span class="nav-ico"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span>
         Projects
         <span class="nav-count" id="nav-projects-count">0</span>
       </button>
-      <button data-view="templates">
+      <button data-view="templates" class="admin-only">
         <span class="nav-ico"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 9h6M12 9v7"/></svg></span>
         Templates
       </button>
@@ -56,17 +56,21 @@
         History
         <span class="nav-count" id="nav-count">0</span>
       </button>
-      <button data-view="gateway">
+      <button data-view="gateway" class="admin-only">
         <span class="nav-ico"><svg viewBox="0 0 24 24"><path d="M4 12h4l3-7 4 14 3-7h2"/></svg></span>
         Gateway
         <span class="nav-status" id="nav-status"></span>
       </button>
-      <button data-view="models">
+      <button data-view="models" class="admin-only">
         <span class="nav-ico"><svg viewBox="0 0 24 24"><path d="M12 3 3 8l9 5 9-5z"/><path d="m3 13 9 5 9-5"/></svg></span>
         Models
         <span class="nav-count" id="models-count">0</span>
       </button>
-      <button id="open-connectors">
+      <button data-view="users" class="admin-only">
+        <span class="nav-ico"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M21.5 20a6.5 6.5 0 0 0-4-6"/></svg></span>
+        Users
+      </button>
+      <button id="open-connectors" class="admin-only">
         <span class="nav-ico"><svg viewBox="0 0 24 24"><path d="M9 7V3M15 7V3M7 7h10v4a5 5 0 0 1-10 0z"/><path d="M12 16v5"/></svg></span>
         Connectors
         <span class="nav-count" id="conn-count">0</span>
@@ -75,7 +79,7 @@
 
     <div class="nav-label">Settings &amp; Help</div>
     <nav class="nav">
-      <button id="open-settings">
+      <button id="open-settings" class="admin-only">
         <span class="nav-ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></span>
         Settings
       </button>
@@ -106,7 +110,7 @@
         <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
       </button>
       <h1 class="page-title" id="page-title">AI Chat</h1>
-      <select class="proj-select" id="chat-project" aria-label="Project for this chat" title="Project: shares instructions and memory"></select>
+      <select class="proj-select admin-only" id="chat-project" aria-label="Project for this chat" title="Project: shares instructions and memory"></select>
       <div class="topbar-actions">
         <div class="model-picker">
           <button class="model-btn" id="model-btn" aria-haspopup="listbox" aria-expanded="false">
@@ -135,10 +139,12 @@
                 <div class="user-sub" id="gateway-status"><span class="dot"></span>checking gateway…</div>
               </div>
             </div>
-            <button role="menuitem" data-pm="settings">Settings</button>
-            <button role="menuitem" data-pm="connectors">Connectors</button>
-            <button role="menuitem" data-pm="gateway">Gateway status</button>
+            <button role="menuitem" data-pm="users" class="admin-only">Admin portal</button>
+            <button role="menuitem" data-pm="settings" class="admin-only">Settings</button>
+            <button role="menuitem" data-pm="connectors" class="admin-only">Connectors</button>
+            <button role="menuitem" data-pm="gateway" class="admin-only">Gateway status</button>
             <button role="menuitem" data-pm="help">Help &amp; shortcuts</button>
+            <button role="menuitem" data-pm="logout" class="account-only">Sign out</button>
           </div>
         </div>
       </div>
@@ -232,6 +238,42 @@
             <div class="table-wrap"><table class="grid-table" id="gw-logs"></table></div>
           </div>
 
+          <div class="view hidden" id="users">
+            <div class="view-head">
+              <div>
+                <h2>Users</h2>
+                <p class="muted" id="users-sub">Everyone who can sign in to Zero Code.</p>
+              </div>
+              <div class="view-actions">
+                <button type="button" class="btn primary sm" id="users-add-btn">+ Add user</button>
+              </div>
+            </div>
+            <form class="u-add hidden" id="users-add" autocomplete="off">
+              <input name="name" maxlength="60" placeholder="Name">
+              <input name="email" type="email" required placeholder="Email">
+              <input name="password" type="password" required minlength="8" placeholder="Password (8+ characters)" autocomplete="new-password">
+              <select name="role" aria-label="Role"><option value="user">User</option><option value="admin">Admin</option></select>
+              <div class="u-add-actions">
+                <button type="button" class="btn ghost sm" id="users-add-cancel">Cancel</button>
+                <button type="submit" class="btn primary sm">Create user</button>
+              </div>
+            </form>
+            <div class="m-health"><div class="m-health-tiles" id="users-tiles"></div></div>
+            <div class="m-toolbar">
+              <label class="search view-search">
+                <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+                <input id="users-search" type="search" placeholder="Search by name or email" autocomplete="off">
+              </label>
+              <div class="seg" id="users-filter" role="group" aria-label="Show">
+                <button data-uf="all" class="on">All</button>
+                <button data-uf="admin">Admins</button>
+                <button data-uf="blocked">Disabled</button>
+              </div>
+            </div>
+            <div class="gw-error hidden" id="users-error"></div>
+            <div id="users-list"></div>
+          </div>
+
           <div class="templates hidden" id="templates">
             <h2>Templates</h2>
             <p class="muted">Pick a prompt to load it into the composer.</p>
@@ -256,11 +298,11 @@
                 Attach
                 <input type="file" id="file" multiple hidden accept="image/*,text/*,.js,.ts,.tsx,.jsx,.py,.java,.go,.rs,.rb,.php,.c,.h,.cpp,.cs,.swift,.kt,.json,.yml,.yaml,.toml,.md,.sql,.sh,.bat,.ps1,.html,.css,.xml,.csv,.env,.ini,.log,.txt">
               </label>
-              <button type="button" class="tool" id="voice" title="Dictate">
+              <button type="button" class="tool admin-only" id="voice" title="Dictate">
                 <svg viewBox="0 0 24 24"><path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2"/></svg>
                 <span id="voice-label">Voice</span>
               </button>
-              <button type="button" class="tool" id="browse-prompts">
+              <button type="button" class="tool admin-only" id="browse-prompts">
                 <svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><circle cx="12" cy="13" r="3"/><path d="m14.5 15.5 2 2"/></svg>
                 Browse Prompts
               </button>
@@ -302,7 +344,7 @@
   <div class="scrim" id="scrim"></div>
 </div>
 
-<button class="fab" id="fab" title="Add a connector" aria-label="Add a connector">
+<button class="fab admin-only" id="fab" title="Add a connector" aria-label="Add a connector">
   <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
 </button>
 
@@ -372,7 +414,7 @@
       <li><kbd>Ctrl</kbd> + <kbd>K</kbd> search chats</li>
       <li><kbd>Esc</kbd> stop reply</li>
     </ul>
-    <p class="muted">Chats are saved in this browser only. Clearing site data removes them.</p>
+    <p class="muted" id="help-storage">Chats are saved in this browser only. Clearing site data removes them.</p>
     <div class="dlg-actions"><button class="btn primary">Got it</button></div>
   </form>
 </dialog>

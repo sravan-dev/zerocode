@@ -2,6 +2,8 @@ export interface LogEntry {
   id: number;
   ts: number;
   requested: string;
+  /** Email of the signed-in user, when the request came from the web app. */
+  user?: string;
   servedBy?: string;
   candidate?: string;
   provider?: string;

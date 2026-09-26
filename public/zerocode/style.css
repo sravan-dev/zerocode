@@ -855,3 +855,30 @@ kbd {
 /* sidebar: no visible scrollbar (still scrolls on very short windows) */
 .side { scrollbar-width: none; }
 .side::-webkit-scrollbar { display: none; width: 0; }
+
+/* ---------- accounts ---------- */
+/* Regular users get the minimal chat: admin-only controls stay hidden until the role is known. */
+[data-role="user"] .admin-only { display: none !important; }
+html:not([data-account]) .account-only { display: none !important; }
+.user-email { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Users (super admin) */
+.u-add { display: grid; grid-template-columns: 1fr 1.3fr 1.3fr auto; gap: 8px; padding: 14px; margin-bottom: 14px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface-2); }
+.u-add input, .u-add select { height: 38px; padding: 0 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--text); outline: 0; min-width: 0; }
+.u-add input:focus, .u-add select:focus { border-color: var(--accent); }
+.u-add-actions { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 8px; }
+.u-row { display: flex; align-items: center; gap: 14px; padding: 12px 16px; background: var(--surface); }
+.u-row + .u-row { border-top: 1px solid var(--border); }
+.u-row.blocked .u-main { opacity: .55; }
+.u-av { width: 36px; height: 36px; flex: none; display: grid; place-items: center; border-radius: 50%; font-weight: 700; color: #fff; background: linear-gradient(135deg, var(--accent), #ff9a52); }
+.u-main { flex: 1; min-width: 0; }
+.u-name { font-weight: 600; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.u-meta { font-size: 12.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.u-acts { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.u-acts .btn { height: 30px; padding: 0 10px; font-size: 12.5px; }
+.u-acts .btn.danger:hover:not(:disabled) { color: var(--danger); border-color: var(--danger); }
+@media (max-width: 760px) {
+  .u-add { grid-template-columns: 1fr; }
+  .u-row { flex-wrap: wrap; }
+  .u-acts { width: 100%; justify-content: flex-start; padding-left: 50px; }
+}

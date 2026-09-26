@@ -7,6 +7,7 @@ import { antigravityRequest } from './antigravity';
 import { Router } from './router';
 import { LogStore } from './logs';
 import { retryAfterMs } from './utils';
+import { dbEnabled } from './db';
 
 function maxTokensCap(errorText: string): number | undefined {
   const m = /max_(?:completion_)?tokens`?\s*(?:must be|should be)?\s*(?:less than or equal to|<=|at most|no more than)\s*`?(\d+)/i.exec(errorText);
@@ -27,12 +28,23 @@ function summarize(text: string): string {
   return text;
 }
 
-export function checkAuth(req: Request, cfg: AppConfig): boolean {
-  if (!cfg.proxyKey) return true;
+/** True when the request carries the configured proxy key (API clients such as editors). */
+export function hasProxyKey(req: Request, cfg: AppConfig): boolean {
+  if (!cfg.proxyKey) return false;
   const auth = req.headers.authorization;
   const bearer = auth && auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
   const xkey = typeof req.headers['x-api-key'] === 'string' ? (req.headers['x-api-key'] as string) : '';
   return bearer === cfg.proxyKey || xkey === cfg.proxyKey;
+}
+
+/**
+ * Who may call /v1: anyone with the proxy key, or a signed-in user when accounts are on.
+ * Without a database and without a proxy key the gateway stays open (local single-user use).
+ */
+export function checkAuth(req: Request, cfg: AppConfig): boolean {
+  if (hasProxyKey(req, cfg)) return true;
+  if (dbEnabled()) return !!req.user;
+  return !cfg.proxyKey;
 }
 
 function sseRewriter(displayModel: string, hooks: { onUsage?: (u: any) => void; onFirstByte?: () => void }): Transform {
@@ -93,7 +105,7 @@ export function createProxyHandlers(deps: ProxyDeps) {
   function listModels(req: Request, res: any) {
     const cfg = getConfig();
     if (!checkAuth(req, cfg)) {
-      return res.status(401).json({ error: { message: 'Invalid API key for ZeroCode proxy', type: 'zerocode_auth' } });
+      return res.status(401).json({ error: { message: 'Sign in or send a valid ZeroCode API key', type: 'zerocode_auth' } });
     }
     const data: any[] = [{ id: 'auto', object: 'model', owned_by: 'zerocode' }];
     if (cfg.routeName && cfg.routeName !== 'auto') data.push({ id: cfg.routeName, object: 'model', owned_by: 'zerocode' });
@@ -114,7 +126,7 @@ export function createProxyHandlers(deps: ProxyDeps) {
   async function chatCompletions(req: Request, res: any): Promise<void> {
     const cfg = getConfig();
     if (!checkAuth(req, cfg)) {
-      res.status(401).json({ error: { message: 'Invalid API key for ZeroCode proxy', type: 'zerocode_auth' } });
+      res.status(401).json({ error: { message: 'Sign in or send a valid ZeroCode API key', type: 'zerocode_auth' } });
       return;
     }
     const body = req.body;
@@ -136,6 +148,7 @@ export function createProxyHandlers(deps: ProxyDeps) {
       logs.add({
         ts: started,
         requested,
+        user: req.user?.email,
         servedBy: undefined,
         candidate: undefined,
         provider: undefined,
@@ -231,6 +244,7 @@ export function createProxyHandlers(deps: ProxyDeps) {
         logs.add({
           ts: started,
           requested,
+          user: req.user?.email,
           servedBy: label,
           candidate: router.key(cand),
           provider: cand.provider,
@@ -268,6 +282,7 @@ export function createProxyHandlers(deps: ProxyDeps) {
         logs.add({
           ts: started,
           requested,
+          user: req.user?.email,
           servedBy: label,
           candidate: router.key(cand),
           provider: cand.provider,
@@ -322,6 +337,7 @@ export function createProxyHandlers(deps: ProxyDeps) {
     logs.add({
       ts: started,
       requested,
+      user: req.user?.email,
       servedBy: undefined,
       candidate: undefined,
       provider: undefined,

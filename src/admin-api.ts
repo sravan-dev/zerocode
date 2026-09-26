@@ -3,7 +3,8 @@ import { AppConfig } from './types';
 import { Router } from './router';
 import { LogStore } from './logs';
 import { listUpstreamModels, testProvider } from './providers';
-import { checkAuth } from './proxy';
+import { hasProxyKey } from './proxy';
+import { dbEnabled } from './db';
 import { maskKey } from './utils';
 import { VERSION } from './config';
 import { authStatus, beginLogin, clearCreds, handleCallbackUrl, isAuthenticated, saveOAuthClientConfig } from './google-auth';
@@ -46,12 +47,15 @@ function sanitizedConfig(cfg: AppConfig) {
 export function mountAdmin(app: Express, deps: AdminDeps): void {
   const { getConfig, updateConfig, router, logs, startedAt } = deps;
 
+  // Gateway admin: the proxy key, a signed-in admin, or (single-user mode with no key) anyone.
   const authGate = (req: Request, res: Response, next: NextFunction) => {
-    if (checkAuth(req, getConfig())) return next();
-    return res.status(401).json({ error: 'unauthorized: set x-api-key to the ZeroCode proxy key' });
+    const cfg = getConfig();
+    if (hasProxyKey(req, cfg) || req.user?.role === 'admin' || (!dbEnabled() && !cfg.proxyKey)) return next();
+    return res.status(req.user ? 403 : 401).json({ error: req.user ? 'Admin only' : 'Sign in as an admin, or send the ZeroCode API key' });
   };
 
   const api = ExRouter();
+  api.use(authGate);
 
   api.get('/status', (_req, res) => {
     const cfg = getConfig();

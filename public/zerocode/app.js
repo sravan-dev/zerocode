@@ -31,7 +31,11 @@
   // Empty now means "let the model decide"; move users still on the old default to it.
   if (!settings.v) { if (Number(settings.maxTokens) === 4096) settings.maxTokens = ''; settings.v = 2; save(KEYS.settings, settings); }
   let chats = load(KEYS.chats, []);
-  let ui = Object.assign({ sideClosed: false, panelClosed: false }, load(KEYS.ui, {}));
+  // Set at boot from /auth/me. accountMode: chats live in the user's account on the server.
+  let me = null;
+  let accountMode = false;
+  const isAdmin = () => !accountMode || (me && me.role === 'admin');
+  let ui =Object.assign({ sideClosed: false, panelClosed: false }, load(KEYS.ui, {}));
   let currentId = null;
   let streaming = null; // { controller, chatId }
   let pendingFiles = []; // { name, text } or { name, image: dataUrl }
@@ -227,6 +231,7 @@
   // Images make chats big. If storage is full, drop image data from the oldest chats first
   // (the thread keeps a placeholder) until everything fits.
   function persistChats() {
+    if (accountMode) { scheduleSync(); return; }
     if (save(KEYS.chats, chats, true)) return;
     const withImages = chats
       .filter((c) => c.messages.some((m) => m.images && m.images.length))
@@ -237,6 +242,63 @@
     }
     save(KEYS.chats, chats);
   }
+  // ---------- account chat sync ----------
+  // Chats are sent to the server whenever they change. `synced` holds the last JSON sent per chat,
+  // so only changed chats are uploaded and removed ones are deleted.
+  const synced = new Map();
+  let syncTimer = 0;
+  let syncWarned = false;
+
+  function scheduleSync() {
+    clearTimeout(syncTimer);
+    syncTimer = setTimeout(syncChats, streaming ? 1500 : 400);
+  }
+
+  async function syncChats(keepalive) {
+    clearTimeout(syncTimer);
+    const ids = new Set(chats.map((c) => c.id));
+    const gone = [...synced.keys()].filter((id) => !ids.has(id));
+    const jobs = [];
+    if (!chats.length && gone.length > 1) {
+      synced.clear();
+      jobs.push(fetch('/api/me/chats', { method: 'DELETE', keepalive: !!keepalive }));
+    } else {
+      for (const id of gone) {
+        synced.delete(id);
+        jobs.push(fetch('/api/me/chats/' + encodeURIComponent(id), { method: 'DELETE', keepalive: !!keepalive }));
+      }
+    }
+    for (const c of chats) {
+      const body = JSON.stringify(c);
+      if (synced.get(c.id) === body) continue;
+      synced.set(c.id, body);
+      jobs.push(fetch('/api/me/chats/' + encodeURIComponent(c.id), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+        keepalive: !!keepalive && body.length < 60000
+      }).then((r) => {
+        if (r.ok) return;
+        synced.delete(c.id);
+        if (r.status === 401) location.href = '/login';
+        throw new Error(r.status === 413 ? 'Chat too large to save (remove some images).' : 'HTTP ' + r.status);
+      }));
+    }
+    const results = await Promise.allSettled(jobs);
+    const failed = results.find((r) => r.status === 'rejected');
+    if (failed && !syncWarned) { syncWarned = true; toast('Could not save chat to your account: ' + failed.reason.message); }
+    if (!failed) syncWarned = false;
+  }
+
+  async function loadAccountChats() {
+    const res = await fetch('/api/me/chats');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const j = await res.json();
+    chats = Array.isArray(j.chats) ? j.chats.filter((c) => c && c.id && Array.isArray(c.messages)) : [];
+    synced.clear();
+    for (const c of chats) synced.set(c.id, JSON.stringify(c));
+  }
+
   function getChat(id) { return chats.find((c) => c.id === id) || null; }
   function current() { return getChat(currentId); }
 
@@ -385,7 +447,8 @@
   function nearBottom() { return scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight < 120; }
   function scrollToBottom(force) { if (force || nearBottom()) scroll.scrollTop = scroll.scrollHeight; }
 
-  const VIEW_TITLES = { projects: 'Projects', templates: 'Templates', history: 'History', models: 'Models', gateway: 'Gateway' };
+  const VIEW_TITLES = { projects: 'Projects', templates: 'Templates', history: 'History', models: 'Models', gateway: 'Gateway', users: 'Users' };
+  const ADMIN_VIEWS = ['projects', 'templates', 'models', 'gateway', 'users'];
 
   // ---------- location hash: survive refresh, allow links + back/forward ----------
   // #/chat/<id>  #/new[?project=<id>]  #/projects[/<id>]  #/templates #/history #/models #/gateway
@@ -411,6 +474,7 @@
     const h = decodeURIComponent(location.hash.replace(/^#\/?/, ''));
     const [path, query] = h.split('?');
     const [name, arg] = path.split('/');
+    if (ADMIN_VIEWS.includes(name) && !isAdmin()) return false;
     if (name === 'chat' && arg && getChat(arg)) { currentId = arg; draftProject = null; showView('chat'); scrollToBottom(true); return true; }
     if (name === 'new') {
       currentId = null;
@@ -420,11 +484,12 @@
       return true;
     }
     if (name === 'projects') { pv.sel = arg && getProject(arg) ? arg : null; showView('projects'); return true; }
-    if (['templates', 'history', 'models', 'gateway'].includes(name)) { showView(name); return true; }
+    if (['templates', 'history', 'models', 'gateway', 'users'].includes(name)) { showView(name); return true; }
     return false;
   }
 
   function showView(next) {
+    if (ADMIN_VIEWS.includes(next) && !isAdmin()) next = 'chat';
     view = next;
     for (const k of Object.keys(VIEW_TITLES)) $(k).classList.toggle('hidden', k !== next);
     $('composer-wrap').classList.toggle('hidden', next !== 'chat' && next !== 'templates');
@@ -440,6 +505,7 @@
     }
     if (next === 'history') renderHistory();
     if (next === 'projects') renderProjects();
+    if (next === 'users') loadUsers();
     $('chat-project').classList.toggle('hidden', next !== 'chat');
     if (next === 'models') { renderModelsView(); loadModelsView(); startModelsPoll(); }
     else stopModelsPoll();
@@ -479,7 +545,7 @@
   function renderHistory() {
     const q = $('history-search').value.trim().toLowerCase();
     const totalMsgs = chats.reduce((n, c) => n + c.messages.length, 0);
-    $('history-sub').textContent = `${chats.length} chat${chats.length === 1 ? '' : 's'} · ${totalMsgs} message${totalMsgs === 1 ? '' : 's'} saved in this browser.`;
+    $('history-sub').textContent = `${chats.length} chat${chats.length === 1 ? '' : 's'} · ${totalMsgs} message${totalMsgs === 1 ? '' : 's'} saved ${accountMode ? 'to your account' : 'in this browser'}.`;
     const list = $('history-list');
     const rows = [];
     for (const c of [...chats].sort((a, b) => b.updated - a.updated)) {
@@ -534,7 +600,8 @@
 
   async function api(path) {
     const res = await fetch('/api' + path, { headers: headers() });
-    if (res.status === 401) throw new Error('The gateway has a proxy key set. Add it in Settings to see this page.');
+    if (res.status === 401) throw new Error(accountMode ? 'Your session ended. Reload the page and sign in again.' : 'The gateway has a proxy key set. Add it in Settings to see this page.');
+    if (res.status === 403) throw new Error('Admin access required.');
     if (!res.ok) {
       let msg = `Gateway returned HTTP ${res.status}`;
       try { const j = await res.json(); msg = (j.error && (j.error.message || j.error)) || msg; } catch { }
@@ -816,7 +883,7 @@
       if (!res.ok) {
         let msg = `HTTP ${res.status}`;
         try { const j = await res.json(); msg = j?.error?.message || msg; } catch { }
-        if (res.status === 401) msg += ' — set the gateway proxy key in Settings.';
+        if (res.status === 401) msg += accountMode ? ' — your session ended. Reload the page and sign in again.' : ' — set the gateway proxy key in Settings.';
         throw new Error(msg);
       }
 
@@ -919,10 +986,12 @@
 
   // ---------- models ----------
   async function loadModels() {
-    const status = $('gateway-status');
+    // Signed in, the profile line shows the account email instead of gateway status.
+    const status = me ? document.createElement('div') : $('gateway-status');
     const pdot = $('profile-dot');
     try {
       const res = await fetch('/v1/models', { headers: headers() });
+      if (res.status === 401 && accountMode) { location.href = '/login?next=' + encodeURIComponent(location.pathname + location.hash); return; }
       if (res.status === 401) {
         status.innerHTML = '<span class="dot err"></span>proxy key needed';
         models = [{ id: 'auto' }];
@@ -1001,8 +1070,9 @@
   function closeOverlays() { shell.classList.remove('side-open', 'panel-open'); }
 
   function applyUser() {
-    const name = (settings.name || '').trim() || 'You';
+    const name = (me ? me.name : (settings.name || '').trim()) || 'You';
     $('user-name').textContent = name;
+    if (me) $('gateway-status').innerHTML = `<span class="user-email">${esc(me.email)}${me.role === 'admin' ? ' · Admin' : ''}</span>`;
     $('user-avatar').textContent = name.charAt(0).toUpperCase();
     $('user-avatar-lg').textContent = name.charAt(0).toUpperCase();
   }
@@ -2390,7 +2460,11 @@
       if (!b) return;
       closeProfile();
       const a = b.dataset.pm;
-      if (a === 'settings') $('open-settings').click();
+      if (a === 'users') showView('users');
+      else if (a === 'logout') {
+        syncChats().finally(() => fetch('/auth/logout', { method: 'POST' }).finally(() => { location.href = '/login'; }));
+      }
+      else if (a === 'settings') $('open-settings').click();
       else if (a === 'connectors') openConnectors();
       else if (a === 'gateway') showView('gateway');
       else if (a === 'help') $('help-dlg').showModal();
@@ -2526,7 +2600,7 @@
 
     // Another tab changed the chats.
     window.addEventListener('storage', (e) => {
-      if (e.key !== KEYS.chats || streaming) return;
+      if (accountMode || e.key !== KEYS.chats || streaming) return;
       chats = load(KEYS.chats, []);
       if (currentId && !getChat(currentId)) currentId = null;
       renderThread();
@@ -2534,7 +2608,169 @@
     });
   }
 
+  // ---------- users (super admin) ----------
+  const uv = { list: [], total: 0, filter: 'all', q: '', busy: false };
+
+  async function adminFetch(method, path, body) {
+    const res = await fetch('/api/admin' + path, {
+      method,
+      headers: body ? { 'Content-Type': 'application/json' } : undefined,
+      body: body ? JSON.stringify(body) : undefined
+    });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
+    return j;
+  }
+
+  async function loadUsers() {
+    try {
+      const j = await adminFetch('GET', '/users');
+      uv.list = j.users || [];
+      uv.total = j.total || uv.list.length;
+      $('users-error').classList.add('hidden');
+    } catch (e) {
+      const el = $('users-error');
+      el.textContent = accountMode ? e.message : 'User accounts need MongoDB. Set MONGODB_URI on the server to enable sign-in.';
+      el.classList.remove('hidden');
+      uv.list = [];
+    }
+    renderUsers();
+  }
+
+  function renderUsers() {
+    const all = uv.list;
+    const day = Date.now() - 86400000;
+    const counts = {
+      total: all.length,
+      admins: all.filter((u) => u.role === 'admin').length,
+      active: all.filter((u) => u.lastLoginAt && Date.parse(u.lastLoginAt) > day).length,
+      blocked: all.filter((u) => u.status === 'blocked').length
+    };
+    $('users-tiles').innerHTML = [
+      ['ok', counts.total, 'Users'], ['warn', counts.active, 'Signed in today'], ['off', counts.admins, 'Admins'], ['err', counts.blocked, 'Disabled']
+    ].map(([t, n, l]) => `<div class="mh ${t}"><b>${n}</b><span>${l}</span></div>`).join('');
+    $('users-sub').textContent = `${uv.total} account${uv.total === 1 ? '' : 's'}. Anyone can register; disable an account to stop it signing in.`;
+    document.querySelectorAll('#users-filter button').forEach((b) => b.classList.toggle('on', b.dataset.uf === uv.filter));
+
+    const q = uv.q.trim().toLowerCase();
+    const shown = all.filter((u) =>
+      (uv.filter === 'all' || (uv.filter === 'admin' && u.role === 'admin') || (uv.filter === 'blocked' && u.status === 'blocked')) &&
+      (!q || u.email.includes(q) || (u.name || '').toLowerCase().includes(q)));
+    const list = $('users-list');
+    if (!shown.length) {
+      list.innerHTML = `<div class="empty-state">${all.length ? 'No users match.' : 'No users yet.'}</div>`;
+      return;
+    }
+    const dis = uv.busy ? 'disabled' : '';
+    list.innerHTML = '<div class="h-rows">' + shown.map((u) => {
+      const self = me && u.id === me.id;
+      const locked = self || u.superAdmin;
+      const via = u.signIn.map((s) => (s === 'google' ? 'Google' : 'Password')).join(' + ') || '—';
+      const last = u.lastLoginAt ? 'last sign-in ' + fmtWhen(Date.parse(u.lastLoginAt)) : 'never signed in';
+      return `<div class="u-row${u.status === 'blocked' ? ' blocked' : ''}">
+        <span class="u-av">${esc((u.name || u.email).charAt(0).toUpperCase())}</span>
+        <div class="u-main">
+          <div class="u-name">${esc(u.name || u.email)}
+            ${u.superAdmin ? '<span class="pill warn">Super admin</span>' : u.role === 'admin' ? '<span class="pill warn">Admin</span>' : ''}
+            ${u.status === 'blocked' ? '<span class="pill err">Disabled</span>' : ''}
+            ${self ? '<span class="pill off">You</span>' : ''}
+          </div>
+          <div class="u-meta">${esc(u.email)} · ${esc(via)} · ${u.chats} chat${u.chats === 1 ? '' : 's'} · joined ${esc(fmtWhen(Date.parse(u.createdAt)))} · ${esc(last)}</div>
+        </div>
+        <div class="u-acts">
+          <button class="btn ghost sm" data-ua="role" data-id="${u.id}" ${locked ? 'disabled' : dis}>${u.role === 'admin' ? 'Remove admin' : 'Make admin'}</button>
+          <button class="btn ghost sm" data-ua="status" data-id="${u.id}" ${locked ? 'disabled' : dis}>${u.status === 'blocked' ? 'Enable' : 'Disable'}</button>
+          <button class="btn ghost sm" data-ua="password" data-id="${u.id}" ${dis}>Set password</button>
+          <button class="btn ghost sm danger" data-ua="delete" data-id="${u.id}" ${locked ? 'disabled' : dis}>Delete</button>
+        </div>
+      </div>`;
+    }).join('') + '</div>';
+  }
+
+  async function userAction(action, id) {
+    const u = uv.list.find((x) => x.id === id);
+    if (!u || uv.busy) return;
+    let req;
+    if (action === 'role') req = ['PATCH', { role: u.role === 'admin' ? 'user' : 'admin' }];
+    else if (action === 'status') {
+      if (u.status === 'active' && !confirm(`Disable ${u.email}? They will be signed out and can't sign in until you enable them again.`)) return;
+      req = ['PATCH', { status: u.status === 'blocked' ? 'active' : 'blocked' }];
+    } else if (action === 'password') {
+      const pw = prompt(`New password for ${u.email} (at least 8 characters). They will be signed out everywhere.`);
+      if (!pw) return;
+      req = ['PATCH', { password: pw }];
+    } else if (action === 'delete') {
+      if (!confirm(`Delete ${u.email} and all their chats? This cannot be undone.`)) return;
+      req = ['DELETE'];
+    }
+    uv.busy = true;
+    renderUsers();
+    try {
+      await adminFetch(req[0], '/users/' + encodeURIComponent(id), req[1]);
+      toast(action === 'delete' ? 'User deleted' : action === 'password' ? 'Password updated' : 'User updated');
+    } catch (e) {
+      toast(e.message);
+    } finally {
+      uv.busy = false;
+      await loadUsers();
+    }
+  }
+
+  function bindUsers() {
+    const form = $('users-add');
+    $('users-add-btn').addEventListener('click', () => { form.classList.toggle('hidden'); if (!form.classList.contains('hidden')) form.email.focus(); });
+    $('users-add-cancel').addEventListener('click', () => { form.reset(); form.classList.add('hidden'); });
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      try {
+        await adminFetch('POST', '/users', { name: form.name.value, email: form.email.value, password: form.password.value, role: form.role.value });
+        toast('User created');
+        form.reset();
+        form.classList.add('hidden');
+        loadUsers();
+      } catch (err) {
+        toast(err.message);
+      }
+    });
+    $('users-search').addEventListener('input', (e) => { uv.q = e.target.value; renderUsers(); });
+    $('users-filter').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-uf]');
+      if (b) { uv.filter = b.dataset.uf; renderUsers(); }
+    });
+    $('users-list').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-ua]');
+      if (b) userAction(b.dataset.ua, b.dataset.id);
+    });
+  }
+
+  // Who is signed in. 404 means the server runs without accounts (single-user mode).
+  async function initAccount() {
+    let res;
+    try { res = await fetch('/auth/me'); } catch { return; }
+    if (res.status === 404) return;
+    if (res.status === 401) {
+      location.replace('/login?next=' + encodeURIComponent(location.pathname + location.hash));
+      await new Promise(() => { }); // stop here while the browser navigates
+    }
+    if (!res.ok) return;
+    me = (await res.json()).user;
+    accountMode = true;
+    document.documentElement.dataset.account = '1';
+    const help = $('help-storage');
+    if (help) help.textContent = 'Chats are saved to your account and available on any device you sign in from.';
+    try {
+      await loadAccountChats();
+    } catch {
+      chats = [];
+      toast('Could not load your chats. Reload to try again.');
+    }
+  }
+
   // ---------- init ----------
+  (async function boot() {
+  await initAccount();
+  // Regular users get the minimal chat UI; admin-only controls stay hidden.
+  document.documentElement.dataset.role = isAdmin() ? 'admin' : 'user';
   applyTheme(document.documentElement.getAttribute('data-theme') || 'light');
   applyLayout();
   applyUser();
@@ -2551,11 +2787,15 @@
   window.addEventListener('popstate', () => { if (location.hash !== routeHash()) { applyRoute(); renderChatList(); } });
   // A refresh while a reply is streaming would cut it off, so ask first.
   window.addEventListener('beforeunload', (e) => { if (streaming) { e.preventDefault(); e.returnValue = ''; } });
+  // Save unsent chat changes when the tab closes.
+  window.addEventListener('pagehide', () => { if (accountMode) syncChats(true); });
   setupVoice();
   bind();
+  bindUsers();
   autoGrow();
   loadModels();
-  api('/config').then((c) => { conn.cfg = c; updateConnCount(); }).catch(() => { });
+  if (isAdmin()) api('/config').then((c) => { conn.cfg = c; updateConnCount(); }).catch(() => { });
   updateProjectUi();
   input.focus();
+  })();
 })();

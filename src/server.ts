@@ -6,6 +6,8 @@ import { LogStore } from './logs';
 import { createProxyHandlers } from './proxy';
 import { mountAdmin } from './admin-api';
 import { handleCallback, OAUTH_CALLBACK_PATH } from './google-auth';
+import { dbEnabled } from './db';
+import { loadUser, mountAuth } from './auth';
 
 export interface ServerDeps {
   getConfig(): AppConfig;
@@ -18,10 +20,12 @@ export interface ServerDeps {
 export function createApp(deps: ServerDeps): express.Express {
   const app = express();
   app.disable('x-powered-by');
+  // Behind nginx: trust its X-Forwarded-* so req.ip and req.secure are the client's.
+  app.set('trust proxy', 1);
 
   app.use((req, res, next) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Authorization,Content-Type,x-api-key,x-requested-with,x-opencode-session');
     res.setHeader('Access-Control-Expose-Headers', 'x-zerocode-candidate,x-zerocode-provider,x-zerocode-fallback');
     if (req.method === 'OPTIONS') {
@@ -36,6 +40,18 @@ export function createApp(deps: ServerDeps): express.Express {
   app.get('/healthz', (_req, res) => {
     res.json({ ok: true, app: 'zerocode' });
   });
+
+  const accounts = dbEnabled();
+  const publicDir = path.join(__dirname, '..', 'public');
+
+  if (accounts) {
+    // Static assets don't need the user; everything else gets req.user from the session cookie.
+    app.use((req, res, next) => {
+      if (/\.(css|js|svg|png|ico|woff2?|map)$/.test(req.path)) return next();
+      loadUser(req, res, next).catch(next);
+    });
+    mountAuth(app);
+  }
 
   const proxy = createProxyHandlers({ getConfig: deps.getConfig, router: deps.router, logs: deps.logs });
   app.get('/v1/models', proxy.listModels);
@@ -64,10 +80,31 @@ export function createApp(deps: ServerDeps): express.Express {
 
   mountAdmin(app, deps);
 
-  const publicDir = path.join(__dirname, '..', 'public');
+  const toLogin = (req: express.Request, res: express.Response) =>
+    res.redirect(302, '/login?next=' + encodeURIComponent(req.originalUrl));
 
-  // Zero Code is the home page; the gateway admin dashboard lives at /dashboard.
-  app.get('/', (_req, res) => res.redirect(302, '/zerocode/'));
+  if (accounts) {
+    app.get('/', (req, res) => res.redirect(302, req.user ? '/zerocode/' : '/login'));
+    app.get('/login', (req, res) => {
+      if (req.user) return res.redirect(302, typeof req.query.next === 'string' && req.query.next.startsWith('/') && !req.query.next.startsWith('//') ? req.query.next : '/zerocode/');
+      res.sendFile(path.join(publicDir, 'login.html'));
+    });
+    // The chat app needs a session; /manage is the super admin portal inside it.
+    app.get(['/zerocode', '/zerocode/', '/zerocode/index.html'], (req, res, next) => (req.user ? next() : toLogin(req, res)));
+    app.get('/manage', (req, res) => {
+      if (!req.user) return toLogin(req, res);
+      res.redirect(302, req.user.role === 'admin' ? '/zerocode/#/users' : '/zerocode/');
+    });
+    app.get('/dashboard', (req, res, next) => {
+      if (!req.user) return toLogin(req, res);
+      if (req.user.role !== 'admin') return res.redirect(302, '/zerocode/');
+      next();
+    });
+  } else {
+    // Single-user mode: Zero Code is the home page.
+    app.get('/', (_req, res) => res.redirect(302, '/zerocode/'));
+  }
+  // The gateway admin dashboard lives at /dashboard.
   app.get('/dashboard', (req, res) => {
     // The dashboard uses relative asset paths, so keep it at /dashboard (no trailing slash).
     if (req.path.endsWith('/')) return res.redirect(301, '/dashboard');
@@ -82,6 +119,7 @@ export function createApp(deps: ServerDeps): express.Express {
 
   app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     const status = typeof err?.status === 'number' ? err.status : 500;
+    if (status >= 500) console.error(err);
     if (status === 400 && err?.type === 'entity.parse.failed') {
       res.status(400).json({ error: { message: 'invalid JSON body', type: 'invalid_request_error' } });
       return;
