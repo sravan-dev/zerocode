@@ -1069,7 +1069,7 @@
   ];
   const TONES = ['tone-sky', 'tone-amber', 'tone-lime', 'tone-rose'];
 
-  const conn = { cfg: null, sel: null, models: {}, test: {}, filter: '', freeOnly: false, busy: false, error: '', testing: null };
+  const conn = { cfg: null, sel: null, models: {}, test: {}, filter: '', freeOnly: false, busy: false, error: '', testing: null, search: '' };
 
   function catalogFor(p) {
     return CATALOG.find((c) => c.key === p.id) || CATALOG.find((c) => c.baseUrl && c.baseUrl === p.baseUrl) || CATALOG.find((c) => c.key === p.type);
@@ -1114,7 +1114,19 @@
     }
     if (conn.cfg && !conn.cfg.providers.some((p) => p.id === conn.sel)) conn.sel = null;
     if (selId) conn.sel = selId;
+    // Default to OpenRouter (or the first connector) so the panel never opens empty.
+    if (!conn.sel && conn.cfg && conn.cfg.providers.length) {
+      conn.sel = (conn.cfg.providers.find((p) => p.id === 'openrouter') || conn.cfg.providers[0]).id;
+    }
     renderConn();
+    autoLoadModels(conn.sel);
+  }
+
+  // Load the model list for a connected provider the first time it's shown.
+  function autoLoadModels(pid) {
+    const p = conn.cfg && conn.cfg.providers.find((x) => x.id === pid);
+    if (!p || conn.models[pid] || providerStatus(p)[0] !== 'ok') return;
+    loadProviderModels(pid);
   }
 
   async function runConn(fn) {
@@ -1137,9 +1149,14 @@
       ? c.key === 'custom' || !providers.some((p) => p.baseUrl === c.baseUrl)
       : !providers.some((p) => p.id === c.key));
 
+    const q = conn.search.trim().toLowerCase();
+    const hit = (...s) => !q || s.some((x) => (x || '').toLowerCase().includes(q));
+    const shownProviders = providers.map((p, i) => ({ p, i })).filter(({ p }) => hit(p.name, p.id, p.baseUrl));
+    const shownAvailable = available.filter((c) => hit(c.name, c.desc));
+
     side.innerHTML = `
-      <div class="cx-label">Connected <span class="muted">(${providers.length})</span></div>
-      ${providers.map((p, i) => {
+      <div class="cx-label">Connected <span class="muted">(${q ? `${shownProviders.length} of ` : ''}${providers.length})</span></div>
+      ${shownProviders.map(({ p, i }) => {
         const [tone, label] = providerStatus(p);
         const n = routeCount(p.id);
         return `<button class="cx-item${p.id === conn.sel ? ' sel' : ''}" data-sel="${esc(p.id)}">
@@ -1148,11 +1165,12 @@
           <span class="pill ${tone}">${label}</span>
         </button>`;
       }).join('')}
-      <div class="cx-label">Add connector</div>
-      ${available.map((c) => `<button class="cx-item add" data-add="${c.key}" ${conn.busy ? 'disabled' : ''}>
+      ${shownAvailable.length ? `<div class="cx-label">Add connector</div>` : ''}
+      ${shownAvailable.map((c) => `<button class="cx-item add" data-add="${c.key}" ${conn.busy ? 'disabled' : ''}>
           <span class="cx-av plus">${ICON.plus}</span>
           <span class="cx-txt"><b>${esc(c.name)}</b><small>${esc(c.desc)}</small></span>
-        </button>`).join('')}`;
+        </button>`).join('')}
+      ${q && !shownProviders.length && !shownAvailable.length ? `<div class="cx-none">No connectors match “${esc(conn.search.trim())}”.</div>` : ''}`;
 
     const p = providers.find((x) => x.id === conn.sel);
     if (!p) {
@@ -1505,8 +1523,9 @@
       const add = e.target.closest('[data-add]');
       if (add) { addConnector(add.dataset.add); return; }
       const sel = e.target.closest('[data-sel]');
-      if (sel) { conn.sel = sel.dataset.sel; conn.filter = ''; renderConn(); }
+      if (sel) { conn.sel = sel.dataset.sel; conn.filter = ''; renderConn(); autoLoadModels(conn.sel); }
     });
+    $('cx-search').addEventListener('input', (e) => { conn.search = e.target.value; renderConn(); });
     const main = $('cx-main');
     main.addEventListener('submit', (e) => { e.preventDefault(); saveConnector(e.target); });
     main.addEventListener('click', (e) => {
