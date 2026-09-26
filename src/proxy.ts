@@ -3,6 +3,7 @@ import { createHash } from 'crypto';
 import { Readable, Transform } from 'stream';
 import { AppConfig, RouteCandidate } from './types';
 import { providerHeaders } from './providers';
+import { antigravityRequest } from './antigravity';
 import { Router } from './router';
 import { LogStore } from './logs';
 import { retryAfterMs } from './utils';
@@ -11,6 +12,12 @@ const RETRYABLE_EXTRA = new Set([401, 402, 403, 404, 408, 409, 429]);
 
 function isRetryable(status: number): boolean {
   return status >= 500 || RETRYABLE_EXTRA.has(status);
+}
+
+function maxTokensCap(errorText: string): number | undefined {
+  const m = /max_(?:completion_)?tokens`?\s*(?:must be|should be)?\s*(?:less than or equal to|<=|at most|no more than)\s*`?(\d+)/i.exec(errorText);
+  const n = m ? Number(m[1]) : NaN;
+  return Number.isInteger(n) && n > 0 ? n : undefined;
 }
 
 function base(p: { baseUrl: string }): string {
@@ -92,18 +99,19 @@ export function createProxyHandlers(deps: ProxyDeps) {
   function listModels(req: Request, res: any) {
     const cfg = getConfig();
     if (!checkAuth(req, cfg)) {
-      return res.status(401).json({ error: { message: 'Invalid API key for Token Route proxy', type: 'token_route_auth' } });
+      return res.status(401).json({ error: { message: 'Invalid API key for ZeroCode proxy', type: 'zerocode_auth' } });
     }
-    const data: any[] = [{ id: 'auto', object: 'model', owned_by: 'token-route' }];
-    if (cfg.routeName && cfg.routeName !== 'auto') data.push({ id: cfg.routeName, object: 'model', owned_by: 'token-route' });
+    const data: any[] = [{ id: 'auto', object: 'model', owned_by: 'zerocode' }];
+    if (cfg.routeName && cfg.routeName !== 'auto') data.push({ id: cfg.routeName, object: 'model', owned_by: 'zerocode' });
     for (const c of cfg.route) {
+      if (c.enabled === false) continue;
       const p = cfg.providers.find((x) => x.id === c.provider);
       if (!p || !p.enabled) continue;
       data.push({
         id: `${c.provider}/${c.model}`,
         object: 'model',
         owned_by: p.id,
-        token_route: { provider: c.provider, model: c.model }
+        zerocode: { provider: c.provider, model: c.model }
       });
     }
     return res.json({ object: 'list', data });
@@ -112,7 +120,7 @@ export function createProxyHandlers(deps: ProxyDeps) {
   async function chatCompletions(req: Request, res: any): Promise<void> {
     const cfg = getConfig();
     if (!checkAuth(req, cfg)) {
-      res.status(401).json({ error: { message: 'Invalid API key for Token Route proxy', type: 'token_route_auth' } });
+      res.status(401).json({ error: { message: 'Invalid API key for ZeroCode proxy', type: 'zerocode_auth' } });
       return;
     }
     const body = req.body;
@@ -147,8 +155,8 @@ export function createProxyHandlers(deps: ProxyDeps) {
       });
       res.status(503).json({
         error: {
-          message: 'No route candidates available. Open the Token Route dashboard, add a provider API key and pick models.',
-          type: 'token_route_error'
+          message: 'No route candidates available. Open the ZeroCode dashboard, add a provider API key and pick models.',
+          type: 'zerocode_error'
         }
       });
       return;
@@ -166,23 +174,32 @@ export function createProxyHandlers(deps: ProxyDeps) {
       const upstreamBody: Record<string, unknown> = { ...body, model: cand.model };
       const ac = new AbortController();
       const timer = setTimeout(() => ac.abort(), cfg.requestTimeoutMs);
+      const headers: Record<string, string> = { ...providerHeaders(p), 'content-type': 'application/json' };
+      if (p.type === 'opencode') {
+        // OpenCode Go requires a stable per-conversation session id for routing/prompt caching.
+        const fromClient = req.headers['x-opencode-session'];
+        headers['x-opencode-session'] =
+          typeof fromClient === 'string' && fromClient.trim()
+            ? fromClient.trim().slice(0, 128)
+            : createHash('sha256').update(JSON.stringify((body.messages as any[])[0] ?? '')).digest('hex').slice(0, 32);
+      }
+      const post = () => fetch(url, { method: 'POST', headers, body: JSON.stringify(upstreamBody), signal: ac.signal });
       let r: any;
       try {
-        const headers: Record<string, string> = { ...providerHeaders(p), 'content-type': 'application/json' };
-        if (p.type === 'opencode') {
-          // OpenCode Go requires a stable per-conversation session id for routing/prompt caching.
-          const fromClient = req.headers['x-opencode-session'];
-          headers['x-opencode-session'] =
-            typeof fromClient === 'string' && fromClient.trim()
-              ? fromClient.trim().slice(0, 128)
-              : createHash('sha256').update(JSON.stringify((body.messages as any[])[0] ?? '')).digest('hex').slice(0, 32);
+        r = p.type === 'antigravity' || p.id === 'antigravity'
+          ? await antigravityRequest(cand.model, body, stream, ac.signal)
+          : await post();
+        if (r.status === 400) {
+          // Some models cap max_tokens below what the client asked for; retry once with the stated limit.
+          const text = await r.clone().text().catch(() => '');
+          const cap = maxTokensCap(text);
+          const asked = typeof upstreamBody.max_tokens === 'number' ? upstreamBody.max_tokens : typeof upstreamBody.max_completion_tokens === 'number' ? upstreamBody.max_completion_tokens : undefined;
+          if (cap && asked && cap < asked) {
+            if ('max_completion_tokens' in upstreamBody) upstreamBody.max_completion_tokens = cap;
+            if ('max_tokens' in upstreamBody) upstreamBody.max_tokens = cap;
+            r = await post();
+          }
         }
-        r = await fetch(url, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(upstreamBody),
-          signal: ac.signal
-        });
       } catch (e: any) {
         clearTimeout(timer);
         lastError = `${p.name}: ${e?.name === 'AbortError' ? 'timed out' : 'network error'} (${String(e?.message || e).slice(0, 200)})`;
@@ -195,7 +212,9 @@ export function createProxyHandlers(deps: ProxyDeps) {
         clearTimeout(timer);
         lastError = `${p.name} HTTP ${r.status}: ${summarize(text).slice(0, 300)}`;
         router.markFailure(cand, raMs, lastError, cfg);
-        if (!isRetryable(r.status)) break;
+        // A 400/422 from one model is usually model-specific (wrong model type, unsupported param),
+        // so keep walking the chain. A pinned model has nowhere else to go.
+        if (resolved.direct && !isRetryable(r.status)) break;
         continue;
       }
       if (!stream) {
@@ -224,8 +243,8 @@ export function createProxyHandlers(deps: ProxyDeps) {
           attempts,
           error: undefined
         });
-        res.set('x-token-route-candidate', label);
-        res.set('x-token-route-provider', p.name);
+        res.set('x-zerocode-candidate', label);
+        res.set('x-zerocode-provider', p.name);
         res.status(200).json(json);
         return;
       }
@@ -272,9 +291,9 @@ export function createProxyHandlers(deps: ProxyDeps) {
       res.set('cache-control', 'no-cache');
       res.set('connection', 'keep-alive');
       res.set('x-accel-buffering', 'no');
-      res.set('x-token-route-candidate', label);
-      res.set('x-token-route-provider', p.name);
-      const nodeStream = Readable.fromWeb(r.body as any);
+      res.set('x-zerocode-candidate', label);
+      res.set('x-zerocode-provider', p.name);
+      const nodeStream = r.body instanceof Readable ? r.body : Readable.fromWeb(r.body as any);
       const rewriter = sseRewriter(requested, {
         onFirstByte: () => {
           usageRef.ttft = Date.now() - started;
@@ -286,7 +305,7 @@ export function createProxyHandlers(deps: ProxyDeps) {
       });
       nodeStream.on('error', (e: any) => {
         try {
-          res.write(`data: ${JSON.stringify({ error: { message: `upstream stream failed: ${String(e?.message || e).slice(0, 200)}`, type: 'token_route_upstream_error' } })}\n\n`);
+          res.write(`data: ${JSON.stringify({ error: { message: `upstream stream failed: ${String(e?.message || e).slice(0, 200)}`, type: 'zerocode_upstream_error' } })}\n\n`);
         } catch { }
         res.end();
         logOnce(false, `stream failed: ${String(e?.message || e).slice(0, 200)}`);
@@ -312,7 +331,7 @@ export function createProxyHandlers(deps: ProxyDeps) {
       error: lastError
     });
     res.status(502).json({
-      error: { message: `All ${usable.length} candidate(s) failed. Last error: ${lastError}`, type: 'token_route_upstream_error' }
+      error: { message: `${attempts} of ${usable.length} candidate(s) tried, all failed. Last error: ${lastError}`, type: 'zerocode_upstream_error' }
     });
   }
 

@@ -1,0 +1,170 @@
+{
+  "name": "tkroll",
+  "displayName": "tkroll",
+  "description": "Rich AI chat for VS Code powered by your ZeroCode gateway: switch models, paste images, @-mention files.",
+  "version": "0.1.2",
+  "publisher": "sravan-dev",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sravan-dev/token-route"
+  },
+  "engines": {
+    "vscode": "^1.106.0"
+  },
+  "categories": [
+    "AI",
+    "Chat"
+  ],
+  "main": "./out/extension.js",
+  "activationEvents": [],
+  "contributes": {
+    "viewsContainers": {
+      "secondarySideBar": [
+        {
+          "id": "tkroll",
+          "title": "tkroll",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "tkroll": [
+        {
+          "type": "webview",
+          "id": "tkroll.chat",
+          "name": "Chat"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "tkroll.open",
+        "title": "Open Chat",
+        "category": "tkroll"
+      },
+      {
+        "command": "tkroll.openInEditor",
+        "title": "Open Chat Beside Editor",
+        "category": "tkroll",
+        "icon": "$(split-horizontal)"
+      },
+      {
+        "command": "tkroll.newChat",
+        "title": "New Chat",
+        "category": "tkroll",
+        "icon": "$(add)"
+      },
+      {
+        "command": "tkroll.setApiKey",
+        "title": "Set Gateway API Key",
+        "category": "tkroll",
+        "icon": "$(key)"
+      },
+      {
+        "command": "tkroll.addSelection",
+        "title": "Add Selection to Chat",
+        "category": "tkroll"
+      },
+      {
+        "command": "tkroll.addFile",
+        "title": "Add File to Chat",
+        "category": "tkroll"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "tkroll.newChat",
+          "when": "view == tkroll.chat",
+          "group": "navigation@1"
+        },
+        {
+          "command": "tkroll.openInEditor",
+          "when": "view == tkroll.chat",
+          "group": "navigation@2"
+        },
+        {
+          "command": "tkroll.setApiKey",
+          "when": "view == tkroll.chat",
+          "group": "navigation@3"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "tkroll.openInEditor",
+          "group": "navigation@90"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "tkroll.addSelection",
+          "when": "editorHasSelection",
+          "group": "tkroll@1"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "tkroll.addFile",
+          "when": "!explorerResourceIsFolder",
+          "group": "tkroll@1"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "tkroll.openInEditor",
+        "key": "ctrl+alt+k",
+        "mac": "cmd+alt+k"
+      },
+      {
+        "command": "tkroll.addSelection",
+        "key": "ctrl+shift+l",
+        "mac": "cmd+shift+l",
+        "when": "editorHasSelection"
+      }
+    ],
+    "configuration": {
+      "title": "tkroll",
+      "properties": {
+        "tkroll.baseUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:3777/v1",
+          "description": "OpenAI-compatible base URL of your ZeroCode gateway (or any OpenAI-compatible API)."
+        },
+        "tkroll.defaultModel": {
+          "type": "string",
+          "default": "auto",
+          "description": "Model used for new chats. \"auto\" lets ZeroCode walk its route chain."
+        },
+        "tkroll.maxTokens": {
+          "type": "number",
+          "default": 2048,
+          "minimum": 16,
+          "description": "Maximum output tokens per reply. Lower it if a provider rejects requests as too large."
+        },
+        "tkroll.systemPrompt": {
+          "type": "string",
+          "default": "You are a helpful coding assistant inside VS Code. Be concise. Use fenced code blocks with a language tag for code.",
+          "description": "System prompt sent with every chat."
+        },
+        "tkroll.maxFileBytes": {
+          "type": "number",
+          "default": 200000,
+          "description": "Maximum size of a mentioned file included in the prompt; larger files are truncated."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -watch -p .",
+    "package": "vsce package --no-dependencies --allow-missing-repository"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/vscode": "^1.106.0",
+    "@vscode/vsce": "^4.0.0",
+    "typescript": "^5.5.4"
+  }
+}

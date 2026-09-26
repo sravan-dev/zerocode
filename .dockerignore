@@ -4,6 +4,7 @@ data
 *.log
 .env
 .playwright-mcp
+tkroll
 .git
 .vscode
 Dockerfile

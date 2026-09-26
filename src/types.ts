@@ -1,9 +1,9 @@
-export type ProviderType = 'openrouter' | 'groq' | 'github' | 'opencode' | 'custom';
+export type ProviderType = 'openrouter' | 'groq' | 'github' | 'opencode' | 'aihubmix' | 'antigravity' | 'custom';
 
-export const PROVIDER_TYPES: ProviderType[] = ['openrouter', 'groq', 'github', 'opencode', 'custom'];
+export const PROVIDER_TYPES: ProviderType[] = ['openrouter', 'groq', 'github', 'opencode', 'aihubmix', 'antigravity', 'custom'];
 
-// Provider types that were removed; configs containing them are dropped on load.
-export const REMOVED_PROVIDER_TYPES = ['gemini', 'antigravity'];
+// Gemini's API-key connector was removed; Antigravity is an OAuth-backed connector.
+export const REMOVED_PROVIDER_TYPES = ['gemini'];
 
 export interface ProviderConfig {
   id: string;
@@ -17,6 +17,8 @@ export interface ProviderConfig {
 export interface RouteCandidate {
   provider: string;
   model: string;
+  /** false = kept on the route but skipped by auto routing and hidden from /v1/models. Absent means enabled. */
+  enabled?: boolean;
 }
 
 export type Strategy = 'failover' | 'round-robin';

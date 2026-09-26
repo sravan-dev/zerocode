@@ -4,3 +4,7 @@ data/
 *.log
 .playwright-mcp/
 .env
+
+# stray screenshots
+bug/
+w1.png

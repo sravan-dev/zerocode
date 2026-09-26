@@ -1,5 +1,5 @@
 {
-  "name": "token-route",
+  "name": "zerocode",
   "version": "0.1.0",
   "description": "Local AI gateway and proxy - switch and failover across free models",
   "main": "dist/index.js",

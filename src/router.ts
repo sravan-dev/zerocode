@@ -1,4 +1,5 @@
 import { AppConfig, RouteCandidate, Strategy } from './types';
+import { isAuthenticated } from './google-auth';
 
 interface HealthEntry {
   until: number;
@@ -10,6 +11,8 @@ export interface CandidateHealth {
   model: string;
   key: string;
   state: 'healthy' | 'cooldown' | 'no-key';
+  /** false when the model is switched off on the route; state still reflects its real health. */
+  enabled: boolean;
   remainingMs?: number;
   lastError?: string;
 }
@@ -23,8 +26,14 @@ export class Router {
   }
 
   isAvailable(c: RouteCandidate, cfg: AppConfig): boolean {
+    return c.enabled !== false && this.providerReady(c, cfg);
+  }
+
+  /** Provider exists, is on, and has a key (custom endpoints may run without one). */
+  providerReady(c: RouteCandidate, cfg: AppConfig): boolean {
     const p = cfg.providers.find((x) => x.id === c.provider);
     if (!p || !p.enabled) return false;
+    if (p.type === 'antigravity' || p.id === 'antigravity') return isAuthenticated();
     if (p.type === 'custom') return true;
     return !!p.apiKey;
   }
@@ -53,7 +62,7 @@ export class Router {
   resolve(model: string, cfg: AppConfig): { candidates: RouteCandidate[]; direct: boolean } {
     const chain = cfg.route;
     const m = (model || '').trim();
-    if (!m || m === 'auto' || m === 'default' || m === 'token-route' || m === cfg.routeName) {
+    if (!m || m === 'auto' || m === 'default' || m === 'zerocode' || m === cfg.routeName) {
       return { candidates: chain, direct: false };
     }
     const slash = m.indexOf('/');
@@ -71,14 +80,15 @@ export class Router {
   healthView(cfg: AppConfig): CandidateHealth[] {
     return cfg.route.map((c) => {
       const key = this.key(c);
-      if (!this.isAvailable(c, cfg)) {
-        return { provider: c.provider, model: c.model, key, state: 'no-key' as const };
+      const enabled = c.enabled !== false;
+      if (!this.providerReady(c, cfg)) {
+        return { provider: c.provider, model: c.model, key, enabled, state: 'no-key' as const };
       }
       const h = this.health.get(key);
       if (h && h.until > Date.now()) {
-        return { provider: c.provider, model: c.model, key, state: 'cooldown' as const, remainingMs: h.until - Date.now(), lastError: h.lastError };
+        return { provider: c.provider, model: c.model, key, enabled, state: 'cooldown' as const, remainingMs: h.until - Date.now(), lastError: h.lastError };
       }
-      return { provider: c.provider, model: c.model, key, state: 'healthy' as const, lastError: h?.lastError };
+      return { provider: c.provider, model: c.model, key, enabled, state: 'healthy' as const, lastError: h?.lastError };
     });
   }
 }

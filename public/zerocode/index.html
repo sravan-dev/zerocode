@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zero Code</title>
+<link rel="icon" type="image/svg+xml" href="logo.svg">
+<link rel="stylesheet" href="style.css">
+<script>
+  // Apply saved theme before first paint to avoid a flash.
+  (function () {
+    var t = null;
+    try { t = localStorage.getItem('zc.theme'); } catch (e) {}
+    if (!t) t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+</head>
+<body>
+<div class="shell" id="shell">
+
+  <!-- Left sidebar -->
+  <aside class="side" id="side">
+    <div class="side-head">
+      <a class="brand" href="./">
+        <img src="logo.svg" alt="" class="brand-mark">
+        <span class="brand-name">Zero Code</span>
+      </a>
+      <button class="icon-btn" id="collapse-side" title="Close sidebar" aria-label="Close sidebar">
+        <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/></svg>
+      </button>
+    </div>
+
+    <label class="search">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input id="search" type="search" placeholder="Search chats" autocomplete="off">
+      <kbd>Ctrl K</kbd>
+    </label>
+
+    <nav class="nav" id="nav">
+      <button data-view="chat" class="active">
+        <span class="nav-ico accent"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span>
+        New chat
+      </button>
+      <button data-view="projects">
+        <span class="nav-ico"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span>
+        Projects
+        <span class="nav-count" id="nav-projects-count">0</span>
+      </button>
+      <button data-view="templates">
+        <span class="nav-ico"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 9h6M12 9v7"/></svg></span>
+        Templates
+      </button>
+      <button data-view="history">
+        <span class="nav-ico"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></svg></span>
+        History
+        <span class="nav-count" id="nav-count">0</span>
+      </button>
+      <button data-view="gateway">
+        <span class="nav-ico"><svg viewBox="0 0 24 24"><path d="M4 12h4l3-7 4 14 3-7h2"/></svg></span>
+        Gateway
+        <span class="nav-status" id="nav-status"></span>
+      </button>
+      <button data-view="models">
+        <span class="nav-ico"><svg viewBox="0 0 24 24"><path d="M12 3 3 8l9 5 9-5z"/><path d="m3 13 9 5 9-5"/></svg></span>
+        Models
+        <span class="nav-count" id="models-count">0</span>
+      </button>
+      <button id="open-connectors">
+        <span class="nav-ico"><svg viewBox="0 0 24 24"><path d="M9 7V3M15 7V3M7 7h10v4a5 5 0 0 1-10 0z"/><path d="M12 16v5"/></svg></span>
+        Connectors
+        <span class="nav-count" id="conn-count">0</span>
+      </button>
+    </nav>
+
+    <div class="nav-label">Settings &amp; Help</div>
+    <nav class="nav">
+      <button id="open-settings">
+        <span class="nav-ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></span>
+        Settings
+      </button>
+      <button id="open-help">
+        <span class="nav-ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01"/></svg></span>
+        Help
+      </button>
+    </nav>
+
+    <div class="side-foot">
+      <div class="theme-toggle" role="group" aria-label="Theme">
+        <button data-theme-set="light">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+          Light
+        </button>
+        <button data-theme-set="dark">
+          <svg viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+          Dark
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main column -->
+  <main class="main">
+    <header class="topbar">
+      <button class="icon-btn only-narrow" id="open-side" aria-label="Open sidebar">
+        <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <h1 class="page-title" id="page-title">AI Chat</h1>
+      <select class="proj-select" id="chat-project" aria-label="Project for this chat" title="Project: shares instructions and memory"></select>
+      <div class="topbar-actions">
+        <div class="model-picker">
+          <button class="model-btn" id="model-btn" aria-haspopup="listbox" aria-expanded="false">
+            <span class="model-dot"></span>
+            <span id="model-label">Smart</span>
+            <svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
+          </button>
+          <div class="model-menu hidden" id="model-menu" role="listbox"></div>
+        </div>
+        <button class="icon-btn" id="help-top" title="Help" aria-label="Help">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01"/></svg>
+        </button>
+        <button class="icon-btn" id="toggle-panel" title="Toggle chat list" aria-label="Toggle chat list">
+          <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M15 4v16"/></svg>
+        </button>
+        <div class="profile">
+          <button class="profile-btn" id="profile-btn" aria-haspopup="menu" aria-expanded="false" title="Profile">
+            <span class="avatar" id="user-avatar">Y</span>
+            <span class="profile-dot" id="profile-dot"></span>
+          </button>
+          <div class="menu profile-menu hidden" id="profile-menu" role="menu">
+            <div class="profile-head">
+              <span class="avatar lg" id="user-avatar-lg">Y</span>
+              <div class="user-meta">
+                <div class="user-name" id="user-name">You</div>
+                <div class="user-sub" id="gateway-status"><span class="dot"></span>checking gateway…</div>
+              </div>
+            </div>
+            <button role="menuitem" data-pm="settings">Settings</button>
+            <button role="menuitem" data-pm="connectors">Connectors</button>
+            <button role="menuitem" data-pm="gateway">Gateway status</button>
+            <button role="menuitem" data-pm="help">Help &amp; shortcuts</button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <div class="stage">
+      <section class="center">
+        <!-- Scrollable content: welcome / thread / templates -->
+        <div class="scroll" id="scroll">
+          <div class="welcome" id="welcome">
+            <h2>Welcome to Zero Code</h2>
+            <p>Describe what you want to build and let the model write it. Not sure where to start?</p>
+            <div class="starters" id="starters"></div>
+          </div>
+
+          <div class="thread hidden" id="thread"></div>
+
+          <div class="view hidden" id="projects"></div>
+
+          <div class="view hidden" id="history">
+            <div class="view-head">
+              <div>
+                <h2>History</h2>
+                <p class="muted" id="history-sub">All chats saved in this browser.</p>
+              </div>
+              <label class="search view-search">
+                <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+                <input id="history-search" type="search" placeholder="Search messages" autocomplete="off">
+              </label>
+            </div>
+            <div id="history-list"></div>
+          </div>
+
+          <div class="view hidden" id="models">
+            <div class="view-head">
+              <div>
+                <h2>Models</h2>
+                <p class="muted" id="models-sub">Models on your route. Disabled models are skipped by Smart and hidden from the picker.</p>
+              </div>
+              <div class="view-actions">
+                <button type="button" class="btn ghost sm" id="models-add">+ Add models</button>
+              </div>
+            </div>
+            <div class="m-toolbar">
+              <label class="search view-search">
+                <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+                <input id="models-search" type="search" placeholder="Search models" autocomplete="off">
+              </label>
+              <select id="models-provider" aria-label="Provider"></select>
+              <div class="seg" id="models-state" role="group" aria-label="Show">
+                <button data-state="all" class="on">All</button>
+                <button data-state="on">Enabled</button>
+                <button data-state="off">Disabled</button>
+              </div>
+            </div>
+            <div class="m-health">
+              <div class="m-health-tiles" id="models-health"></div>
+              <button type="button" class="btn ghost sm" id="models-check">Check health</button>
+            </div>
+            <div class="m-bulk" id="models-bulk">
+              <label class="check"><input type="checkbox" id="models-all"> <span id="models-sel-label">Select all</span></label>
+              <div class="m-bulk-actions">
+                <button type="button" class="btn ghost sm" data-bulk="on">Enable</button>
+                <button type="button" class="btn ghost sm" data-bulk="off">Disable</button>
+              </div>
+            </div>
+            <div class="gw-error hidden" id="models-error"></div>
+            <div id="models-list"></div>
+          </div>
+
+          <div class="view hidden" id="gateway">
+            <div class="view-head">
+              <div>
+                <h2>Gateway</h2>
+                <p class="muted" id="gw-sub">ZeroCode status, route health and recent requests.</p>
+              </div>
+              <div class="view-actions">
+                <button type="button" class="btn ghost sm" id="gw-refresh">Refresh</button>
+                <a class="btn ghost sm" href="/dashboard" target="_blank" rel="noopener">Full dashboard ↗</a>
+              </div>
+            </div>
+            <div class="gw-error hidden" id="gw-error"></div>
+            <div class="tiles" id="gw-tiles"></div>
+            <h3 class="sec">Route health</h3>
+            <div class="table-wrap"><table class="grid-table" id="gw-route"></table></div>
+            <div class="sec-row">
+              <h3 class="sec">Recent requests</h3>
+              <label class="check"><input type="checkbox" id="gw-errors-only"> Errors only</label>
+            </div>
+            <div class="table-wrap"><table class="grid-table" id="gw-logs"></table></div>
+          </div>
+
+          <div class="templates hidden" id="templates">
+            <h2>Templates</h2>
+            <p class="muted">Pick a prompt to load it into the composer.</p>
+            <div class="tpl-grid" id="tpl-grid"></div>
+          </div>
+        </div>
+
+        <!-- Composer -->
+        <div class="composer-wrap" id="composer-wrap">
+          <form class="composer" id="composer">
+            <div class="attachments" id="attachments"></div>
+            <div class="composer-row">
+              <textarea id="input" rows="1" maxlength="32000" placeholder="Ask Zero Code to write, fix or explain code…" autocomplete="off"></textarea>
+              <button type="submit" class="send" id="send" title="Send (Enter)" aria-label="Send">
+                <svg viewBox="0 0 24 24" class="i-send"><path d="M4 12 20 4l-4 16-4-7-8-1z"/></svg>
+                <svg viewBox="0 0 24 24" class="i-stop"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+              </button>
+            </div>
+            <div class="composer-tools">
+              <label class="tool" title="Attach images, text or code files (you can also paste or drop them)">
+                <svg viewBox="0 0 24 24"><path d="m21 12-8.5 8.5a5 5 0 0 1-7-7L14 5a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 8"/></svg>
+                Attach
+                <input type="file" id="file" multiple hidden accept="image/*,text/*,.js,.ts,.tsx,.jsx,.py,.java,.go,.rs,.rb,.php,.c,.h,.cpp,.cs,.swift,.kt,.json,.yml,.yaml,.toml,.md,.sql,.sh,.bat,.ps1,.html,.css,.xml,.csv,.env,.ini,.log,.txt">
+              </label>
+              <button type="button" class="tool" id="voice" title="Dictate">
+                <svg viewBox="0 0 24 24"><path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2"/></svg>
+                <span id="voice-label">Voice</span>
+              </button>
+              <button type="button" class="tool" id="browse-prompts">
+                <svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><circle cx="12" cy="13" r="3"/><path d="m14.5 15.5 2 2"/></svg>
+                Browse Prompts
+              </button>
+              <span class="counter" id="counter">0 / 32,000</span>
+            </div>
+          </form>
+          <p class="project-context hidden" id="project-context"></p>
+          <p class="disclaimer">Models can make mistakes. Review code before running it. Model: <span id="footer-model">Smart</span></p>
+        </div>
+      </section>
+
+      <!-- Right panel: chats -->
+      <aside class="panel" id="panel">
+        <div class="panel-head">
+          <div>Chats <span class="muted" id="chat-count">(0)</span></div>
+          <div class="panel-menu">
+            <button class="icon-btn sm" id="panel-more" aria-label="More">
+              <svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/></svg>
+            </button>
+            <div class="menu hidden" id="panel-menu">
+              <button id="export-chats">Export all as JSON</button>
+              <button id="clear-chats" class="danger">Delete all chats</button>
+            </div>
+          </div>
+        </div>
+        <div class="chat-list" id="chat-list"></div>
+      </aside>
+    </div>
+  </main>
+
+  <div class="scrim" id="scrim"></div>
+</div>
+
+<button class="fab" id="fab" title="Add a connector" aria-label="Add a connector">
+  <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+</button>
+
+<!-- Settings dialog -->
+<dialog id="settings-dlg" class="dlg">
+  <form method="dialog" id="settings-form">
+    <h3>Settings</h3>
+    <label>Display name
+      <input name="name" maxlength="40" placeholder="You">
+    </label>
+    <label>Gateway proxy key <span class="muted">(only if ZeroCode has one set)</span>
+      <input name="apiKey" type="password" autocomplete="off" placeholder="leave empty if none">
+    </label>
+    <label>Max output tokens <span class="muted">(reasoning models need Auto or a high limit)</span>
+      <input name="maxTokens" type="number" min="64" max="200000" step="64" placeholder="Auto: let the model decide (recommended)">
+    </label>
+    <label>About you <span class="muted">(memory used in every chat)</span>
+      <textarea name="about" rows="3" placeholder="e.g. I'm a backend dev on Windows, prefer TypeScript and short answers."></textarea>
+    </label>
+    <label>System prompt
+      <textarea name="system" rows="4"></textarea>
+    </label>
+    <div class="dlg-actions">
+      <button value="cancel" class="btn ghost">Cancel</button>
+      <button value="save" class="btn primary">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Connectors dialog -->
+<dialog id="conn-dlg" class="dlg wide" aria-labelledby="conn-title">
+  <div class="cx">
+    <div class="cx-top">
+      <div>
+        <h3 id="conn-title">Connectors</h3>
+        <p class="muted">Connect model providers and choose which models Smart can use.</p>
+      </div>
+      <button class="icon-btn" id="conn-close" aria-label="Close">
+        <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+    </div>
+    <div class="cx-body">
+      <div class="cx-side" id="cx-side"></div>
+      <div class="cx-main" id="cx-main"></div>
+    </div>
+  </div>
+</dialog>
+
+<!-- Image viewer -->
+<dialog id="img-view" class="img-view" aria-label="Image">
+  <form method="dialog"><button class="img-view-close" aria-label="Close">&times;</button></form>
+  <img id="img-view-img" alt="Attached image">
+</dialog>
+
+<!-- Help dialog -->
+<dialog id="help-dlg" class="dlg">
+  <form method="dialog">
+    <h3>Zero Code</h3>
+    <p>Chats go through your local ZeroCode gateway. The model picker lists the models on your route; <b>auto</b> tries them in order and falls back when one fails.</p>
+    <ul class="keys">
+      <li><kbd>Enter</kbd> send</li>
+      <li><kbd>Shift</kbd> + <kbd>Enter</kbd> new line</li>
+      <li><kbd>Ctrl</kbd> + <kbd>K</kbd> search chats</li>
+      <li><kbd>Esc</kbd> stop reply</li>
+    </ul>
+    <p class="muted">Chats are saved in this browser only. Clearing site data removes them.</p>
+    <div class="dlg-actions"><button class="btn primary">Got it</button></div>
+  </form>
+</dialog>
+
+<div class="toast hidden" id="toast"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

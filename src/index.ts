@@ -17,7 +17,7 @@ function loadDotEnv() {
 function main() {
   const major = Number((process.versions.node.split('.')[0] || '0'));
   if (!Number.isFinite(major) || major < 18) {
-    console.error('Token Route requires Node.js 18 or newer.');
+    console.error('ZeroCode requires Node.js 18 or newer.');
     process.exit(1);
   }
   loadDotEnv();
@@ -42,7 +42,7 @@ function main() {
     const line = '\u2500'.repeat(52);
     console.log('');
     console.log(line);
-    console.log(`  TOKEN ROUTE v${VERSION}  -  local AI gateway`);
+    console.log(`  ZEROCODE v${VERSION}  -  local AI gateway`);
     console.log(line);
     console.log(`  Dashboard : http://${liveCfg.host}:${liveCfg.port}`);
     console.log(`  API base  : http://${liveCfg.host}:${liveCfg.port}/v1   (OpenAI-compatible)`);

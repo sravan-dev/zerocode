@@ -11,7 +11,7 @@ WORKDIR /app
 ENV NODE_ENV=production \
     HOST=0.0.0.0 \
     PORT=3777 \
-    TOKEN_ROUTE_HOME=/data
+    ZEROCODE_HOME=/data
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY package.json ./

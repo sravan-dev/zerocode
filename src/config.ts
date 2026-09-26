@@ -5,8 +5,8 @@ import { AppConfig, ProviderConfig, PROVIDER_TYPES, REMOVED_PROVIDER_TYPES, Rout
 export const VERSION = '0.1.0';
 
 const DEFAULT_ROUTE: RouteCandidate[] = [
-  { provider: 'groq', model: 'llama-3.3-70b-versatile' },
-  { provider: 'openrouter', model: 'meta-llama/llama-3.3-70b-instruct:free' }
+  { provider: 'groq', model: 'openai/gpt-oss-120b' },
+  { provider: 'openrouter', model: 'nvidia/nemotron-3-ultra-550b-a55b:free' }
 ];
 
 const DEFAULT_PROVIDERS: ProviderConfig[] = [
@@ -14,7 +14,8 @@ const DEFAULT_PROVIDERS: ProviderConfig[] = [
   { id: 'groq', name: 'Groq', type: 'groq', baseUrl: 'https://api.groq.com/openai/v1', apiKey: '', enabled: true },
   // GitHub Models ('github' type) retired by GitHub on 2026-07-30; kept in PROVIDER_TYPES only so old configs still load.
   { id: 'opencode', name: 'OpenCode Zen', type: 'opencode', baseUrl: 'https://opencode.ai/zen/v1', apiKey: '', enabled: true },
-  { id: 'opencode-go', name: 'OpenCode Go', type: 'opencode', baseUrl: 'https://opencode.ai/zen/go/v1', apiKey: '', enabled: true }
+  { id: 'opencode-go', name: 'OpenCode Go', type: 'opencode', baseUrl: 'https://opencode.ai/zen/go/v1', apiKey: '', enabled: true },
+  { id: 'aihubmix', name: 'AIHubMix', type: 'aihubmix', baseUrl: 'https://aihubmix.com/v1', apiKey: '', enabled: true }
 ];
 
 export function defaultConfig(): AppConfig {
@@ -25,14 +26,14 @@ export function defaultConfig(): AppConfig {
     strategy: 'failover',
     cooldownMs: 60000,
     requestTimeoutMs: 180000,
-    routeName: 'token-route',
+    routeName: 'zerocode',
     route: DEFAULT_ROUTE,
     providers: DEFAULT_PROVIDERS
   };
 }
 
 export function configDir(): string {
-  return process.env.TOKEN_ROUTE_HOME || path.resolve(process.cwd(), 'data');
+  return process.env.ZEROCODE_HOME || process.env.TOKEN_ROUTE_HOME || path.resolve(process.cwd(), 'data');
 }
 
 export function configPath(): string {
@@ -46,7 +47,7 @@ function applyEnv(cfg: AppConfig): AppConfig {
   if (host) cfg.host = host;
   const port = Number(process.env.PORT);
   if (Number.isInteger(port) && port > 0 && port < 65536) cfg.port = port;
-  const key = process.env.TOKEN_ROUTE_PROXY_KEY?.trim();
+  const key = (process.env.ZEROCODE_PROXY_KEY || process.env.TOKEN_ROUTE_PROXY_KEY)?.trim();
   if (key && !cfg.proxyKey) cfg.proxyKey = key;
   return cfg;
 }
@@ -72,7 +73,7 @@ function readConfigFile(): AppConfig {
     if (Array.isArray(raw.route)) {
       cfg.route = raw.route
         .filter((c: any) => c && typeof c.provider === 'string' && typeof c.model === 'string' && c.provider && c.model)
-        .map((c: any) => ({ provider: c.provider, model: c.model }));
+        .map((c: any) => (c.enabled === false ? { provider: c.provider, model: c.model, enabled: false } : { provider: c.provider, model: c.model }));
     }
     if (Array.isArray(raw.providers)) {
       cfg.providers = raw.providers
@@ -81,12 +82,12 @@ function readConfigFile(): AppConfig {
         .map((p: any) => ({
           id: p.id,
           name: typeof p.name === 'string' && p.name.trim() ? p.name.trim() : p.id,
-          type: PROVIDER_TYPES.includes(p.type) ? p.type : 'custom',
+          type: p.id === 'antigravity' ? 'antigravity' : PROVIDER_TYPES.includes(p.type) ? p.type : 'custom',
           baseUrl: typeof p.baseUrl === 'string' ? p.baseUrl.trim() : '',
           apiKey: typeof p.apiKey === 'string' ? p.apiKey : '',
           enabled: p.enabled !== false
         }));
-      for (const builtin of ['opencode', 'opencode-go'] as const) {
+      for (const builtin of ['opencode', 'opencode-go', 'aihubmix'] as const) {
         if (!cfg.providers.some((p) => p.id === builtin)) {
           cfg.providers.push(DEFAULT_PROVIDERS.find((p) => p.id === builtin)!);
         }
@@ -144,7 +145,7 @@ export function applyPartial(cfg: AppConfig, u: ConfigUpdate): { restartRequired
   if (u.strategy === 'failover' || u.strategy === 'round-robin') cfg.strategy = u.strategy;
   if (typeof u.cooldownMs === 'number' && u.cooldownMs >= 1000 && u.cooldownMs <= 3600000) cfg.cooldownMs = Math.round(u.cooldownMs);
   if (typeof u.requestTimeoutMs === 'number' && u.requestTimeoutMs >= 5000 && u.requestTimeoutMs <= 600000) cfg.requestTimeoutMs = Math.round(u.requestTimeoutMs);
-  if (typeof u.routeName === 'string') cfg.routeName = u.routeName.trim().slice(0, 64) || 'token-route';
+  if (typeof u.routeName === 'string') cfg.routeName = u.routeName.trim().slice(0, 64) || 'zerocode';
   if (Array.isArray(u.route)) {
     const seen = new Set<string>();
     const next: RouteCandidate[] = [];
@@ -153,7 +154,9 @@ export function applyPartial(cfg: AppConfig, u: ConfigUpdate): { restartRequired
         const k = item.provider + '::' + item.model;
         if (seen.has(k)) continue;
         seen.add(k);
-        next.push({ provider: item.provider, model: item.model.slice(0, 200) });
+        const cand: RouteCandidate = { provider: item.provider, model: item.model.slice(0, 200) };
+        if (item.enabled === false) cand.enabled = false;
+        next.push(cand);
       }
     }
     cfg.route = next;
@@ -167,7 +170,7 @@ export function applyPartial(cfg: AppConfig, u: ConfigUpdate): { restartRequired
       if (ids.has(raw.id)) continue;
       ids.add(raw.id);
       const prev = byId.get(raw.id);
-      const type: string = PROVIDER_TYPES.includes(raw.type) ? raw.type : prev ? prev.type : 'custom';
+      const type: string = raw.id === 'antigravity' ? 'antigravity' : PROVIDER_TYPES.includes(raw.type) ? raw.type : prev ? prev.type : 'custom';
       const apiKey = raw.apiKey === undefined ? (prev ? prev.apiKey : '') : String(raw.apiKey ?? '');
       const baseUrl = typeof raw.baseUrl === 'string' && raw.baseUrl.trim() ? raw.baseUrl.trim() : prev ? prev.baseUrl : '';
       const name = typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim().slice(0, 60) : prev ? prev.name : raw.id;

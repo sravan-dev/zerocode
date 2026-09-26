@@ -1,9 +1,12 @@
 import { ProviderConfig } from './types';
+import { listAntigravityModels } from './antigravity';
 
 export interface UpstreamModel {
   id: string;
   name?: string;
   free?: boolean;
+  /** false for models that can't serve /chat/completions (speech, TTS, embeddings, classifiers, image gen). */
+  chat?: boolean;
   context?: number;
 }
 
@@ -12,13 +15,24 @@ export function providerHeaders(p: ProviderConfig): Record<string, string> {
   if (p.apiKey) h['authorization'] = `Bearer ${p.apiKey}`;
   if (p.type === 'openrouter') {
     h['http-referer'] = 'http://127.0.0.1';
-    h['x-title'] = 'Token Route';
+    h['x-title'] = 'ZeroCode';
   }
   if (p.type === 'opencode') {
     // OpenCode Go asks clients to identify themselves rather than use a generic SDK UA.
-    h['user-agent'] = 'token-route/0.1.0';
+    h['user-agent'] = 'zerocode/0.1.0';
   }
   return h;
+}
+
+const NON_CHAT_ID = /whisper|orpheus|playai-tts|\btts\b|-tts|text-to-speech|speech|transcri|distil-whisper|embed|embedding|rerank|prompt-guard|llama-guard|safeguard|moderation|dall-e|imagen|stable-diffusion|flux|sdxl|midjourney|image-gen|veo|sora|lyria|musicgen/i;
+
+export function isChatModel(m: any): boolean {
+  const id = String(m?.id ?? m?.name ?? '');
+  const modality = String(m?.architecture?.output_modalities ?? m?.architecture?.modality ?? '').toLowerCase();
+  if (modality && !modality.includes('text')) return false;
+  const type = String(m?.type ?? m?.object_type ?? '').toLowerCase();
+  if (type && /audio|embedding|image|rerank|moderation/.test(type)) return false;
+  return !NON_CHAT_ID.test(id);
 }
 
 function isFreeModel(m: any): boolean {
@@ -29,6 +43,7 @@ function isFreeModel(m: any): boolean {
 }
 
 export async function listUpstreamModels(p: ProviderConfig, timeoutMs = 15000): Promise<UpstreamModel[]> {
+  if (p.type === 'antigravity' || p.id === 'antigravity') return listAntigravityModels();
   const url = p.baseUrl.replace(/\/+$/, '') + '/models';
   const ac = new AbortController();
   const t = setTimeout(() => ac.abort(), timeoutMs);
@@ -50,6 +65,7 @@ export async function listUpstreamModels(p: ProviderConfig, timeoutMs = 15000): 
         id,
         name: typeof m?.display_name === 'string' ? m.display_name : undefined,
         free: isFreeModel(m),
+        chat: isChatModel(m),
         context:
           typeof m?.context_length === 'number'
             ? m.context_length

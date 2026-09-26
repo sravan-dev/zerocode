@@ -6,6 +6,7 @@ import { listUpstreamModels, testProvider } from './providers';
 import { checkAuth } from './proxy';
 import { maskKey } from './utils';
 import { VERSION } from './config';
+import { authStatus, beginLogin, clearCreds, handleCallbackUrl, isAuthenticated, saveOAuthClientConfig } from './google-auth';
 
 export interface AdminDeps {
   getConfig(): AppConfig;
@@ -26,15 +27,19 @@ function sanitizedConfig(cfg: AppConfig) {
     requestTimeoutMs: cfg.requestTimeoutMs,
     routeName: cfg.routeName,
     route: cfg.route,
-    providers: cfg.providers.map((p) => ({
-      id: p.id,
-      name: p.name,
-      type: p.type,
-      baseUrl: p.baseUrl,
-      enabled: p.enabled,
-      hasKey: !!p.apiKey,
-      keyHint: p.apiKey ? maskKey(p.apiKey) : ''
-    }))
+    providers: cfg.providers.map((p) => {
+      const google = p.type === 'antigravity' || p.id === 'antigravity' ? authStatus() : undefined;
+      return {
+        id: p.id,
+        name: p.name,
+        type: p.type,
+        baseUrl: p.baseUrl,
+        enabled: p.enabled,
+        hasKey: google ? google.authenticated : !!p.apiKey,
+        keyHint: google ? google.email || '' : p.apiKey ? maskKey(p.apiKey) : '',
+        google
+      };
+    })
   };
 }
 
@@ -43,7 +48,7 @@ export function mountAdmin(app: Express, deps: AdminDeps): void {
 
   const authGate = (req: Request, res: Response, next: NextFunction) => {
     if (checkAuth(req, getConfig())) return next();
-    return res.status(401).json({ error: 'unauthorized: set x-api-key to the Token Route proxy key' });
+    return res.status(401).json({ error: 'unauthorized: set x-api-key to the ZeroCode proxy key' });
   };
 
   const api = ExRouter();
@@ -51,7 +56,7 @@ export function mountAdmin(app: Express, deps: AdminDeps): void {
   api.get('/status', (_req, res) => {
     const cfg = getConfig();
     res.json({
-      app: 'token-route',
+      app: 'zerocode',
       version: VERSION,
       uptimeMs: Date.now() - startedAt,
       host: cfg.host,
@@ -78,7 +83,9 @@ export function mountAdmin(app: Express, deps: AdminDeps): void {
     const cfg = getConfig();
     const p = cfg.providers.find((x) => x.id === (req.body || {}).id);
     if (!p) return res.status(404).json({ error: 'provider not found' });
-    if (!p.apiKey && p.type !== 'custom') return res.json({ ok: false, ms: 0, count: 0, error: 'No API key set' });
+    const antigravity = p.type === 'antigravity' || p.id === 'antigravity';
+    if (antigravity && !isAuthenticated()) return res.json({ ok: false, ms: 0, count: 0, error: 'Sign in with Google first' });
+    if (!p.apiKey && p.type !== 'custom' && !antigravity) return res.json({ ok: false, ms: 0, count: 0, error: 'No API key set' });
     const result = await testProvider(p);
     res.json(result);
   });
@@ -87,13 +94,50 @@ export function mountAdmin(app: Express, deps: AdminDeps): void {
     const cfg = getConfig();
     const p = cfg.providers.find((x) => x.id === req.params.id);
     if (!p) return res.status(404).json({ error: 'provider not found' });
-    if (!p.apiKey && p.type !== 'custom') return res.status(400).json({ error: 'No API key set for this provider' });
+    const antigravity = p.type === 'antigravity' || p.id === 'antigravity';
+    if (antigravity && !isAuthenticated()) return res.status(400).json({ error: 'Sign in with Google first' });
+    if (!p.apiKey && p.type !== 'custom' && !antigravity) return res.status(400).json({ error: 'No API key set for this provider' });
     try {
       const models = await listUpstreamModels(p);
       res.json({ provider: p.id, models });
     } catch (e: any) {
       res.status(502).json({ error: String(e?.message || e) });
     }
+  });
+
+  api.get('/google/status', (_req, res) => {
+    res.json(authStatus());
+  });
+
+  api.put('/google/client', (req, res) => {
+    const body = req.body || {};
+    try {
+      saveOAuthClientConfig(String(body.clientId || ''), String(body.clientSecret || ''));
+      res.json(authStatus());
+    } catch (e: any) {
+      res.status(400).json({ error: String(e?.message || e) });
+    }
+  });
+
+  api.post('/google/login', (_req, res) => {
+    try { res.json(beginLogin(getConfig().port)); }
+    catch (e: any) { res.status(400).json({ error: String(e?.message || e) }); }
+  });
+
+  api.post('/google/callback', async (req, res) => {
+    const url = (req.body || {}).url;
+    if (typeof url !== 'string' || !url.trim()) return res.status(400).json({ error: 'Paste the full URL from the Google redirect page.' });
+    try {
+      const result = await handleCallbackUrl(url);
+      res.json({ ok: true, email: result.email });
+    } catch (e: any) {
+      res.status(400).json({ error: String(e?.message || e) });
+    }
+  });
+
+  api.post('/google/logout', (_req, res) => {
+    clearCreds();
+    res.json({ ok: true });
   });
 
   api.get('/health', (_req, res) => {

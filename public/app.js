@@ -13,7 +13,7 @@ const state = {
   logs: [],
   drafts: {},
   modal: null,
-  chat: { messages: [], model: 'auto', stream: true, busy: false, maxTokens: 800 },
+  chat: { messages: [], model: 'auto', stream: true, busy: false, maxTokens: 800, pendingImages: [] },
   logsErrorsOnly: false
 };
 
@@ -57,7 +57,7 @@ function showUnlock() {
   root.innerHTML =
     '<div class="modal" style="width:420px">' +
     '<h2>Dashboard locked</h2>' +
-    '<p class="muted" style="margin:0 0 12px">This Token Route instance requires an API key. Enter the proxy key you configured.</p>' +
+    '<p class="muted" style="margin:0 0 12px">This ZeroCode instance requires an API key. Enter the proxy key you configured.</p>' +
     '<input class="input" id="unlock-input" type="password" placeholder="proxy key">' +
     '<div class="foot"><button class="btn primary" id="unlock-save">Unlock</button></div>' +
     '</div>';
@@ -209,7 +209,7 @@ async function saveProviders(providers) {
   const j = await api('/api/config', { method: 'PUT', body: { providers } });
   state.cfg = j;
   state.drafts = {};
-  if (j.restartRequired) toast('Saved. Restart Token Route to apply network changes.');
+  if (j.restartRequired) toast('Saved. Restart ZeroCode to apply network changes.');
   else toast('Providers saved', 'ok');
 }
 
@@ -324,6 +324,7 @@ function keyUrl(type) {
     case 'openrouter': return 'https://openrouter.ai/keys';
     case 'groq': return 'https://console.groq.com/keys';
     case 'opencode': return 'https://opencode.ai';
+    case 'aihubmix': return 'https://console.aihubmix.com/token';
     default: return '';
   }
 }
@@ -333,6 +334,7 @@ function providerHint(p) {
     case 'openrouter': return 'Get a free key at openrouter.ai/keys. Models ending in ":free" cost nothing.';
     case 'groq': return 'Free key at console.groq.com/keys. Very fast Llama models, generous free tier.';
     case 'github': return 'GitHub Models was retired by GitHub on July 30, 2026 - this provider no longer works. Remove it and use OpenRouter, Groq or OpenCode instead.';
+    case 'aihubmix': return 'Key from console.aihubmix.com/token. One key for OpenAI, Claude, Gemini, DeepSeek and more (paid credits); a few models are free.';
     case 'opencode':
       return p.id === 'opencode-go'
         ? 'OpenCode Go subscription ($10/mo flat, dollar-metered). Same API key as Zen (opencode.ai console) with an active Go plan. Curated coding models: GLM, Kimi, DeepSeek, MiniMax and more.'
@@ -344,7 +346,7 @@ function providerHint(p) {
 function openModelsModal(pid) {
   const p = (state.cfg.providers || []).find((x) => x.id === pid);
   if (!p) return;
-  state.modal = { pid, models: [], selected: new Set(), q: '', freeOnly: false, loading: true, error: null, manual: '' };
+  state.modal = { pid, models: [], selected: new Set(), q: '', freeOnly: false, showNonChat: false, loading: true, error: null, manual: '' };
   const root = $('#modal-root');
   root.classList.remove('hidden');
   root.innerHTML =
@@ -353,6 +355,7 @@ function openModelsModal(pid) {
     '<div class="row" style="margin-bottom:10px">' +
     '<input class="input grow" id="mm-search" placeholder="Search models...">' +
     '<label class="row" style="gap:6px;font-size:12.5px"><input type="checkbox" id="mm-free"> free only</label>' +
+    '<label class="row" style="gap:6px;font-size:12.5px" title="Speech, TTS, embedding and classifier models cannot answer chat requests"><input type="checkbox" id="mm-nonchat"> non-chat</label>' +
     '<button class="btn small" id="mm-select-all">Select all</button>' +
     '</div>' +
     '<div class="body" id="mm-list"></div>' +
@@ -365,11 +368,12 @@ function openModelsModal(pid) {
     '</div>';
   $('#mm-search').addEventListener('input', (e) => { state.modal.q = e.target.value.toLowerCase(); renderModelList(); });
   $('#mm-free').addEventListener('change', (e) => { state.modal.freeOnly = e.target.checked; renderModelList(); });
+  $('#mm-nonchat').addEventListener('change', (e) => { state.modal.showNonChat = e.target.checked; renderModelList(); });
   $('#mm-select-all').onclick = () => {
     const m = state.modal;
     if (!m || m.loading || m.error) return;
     const existing = new Set((state.cfg.route || []).map((c) => c.provider + '/' + c.model));
-    const selectable = filteredModalModels().filter((x) => !existing.has(m.pid + '/' + x.id));
+    const selectable = filteredModalModels().filter((x) => x.chat !== false && !existing.has(m.pid + '/' + x.id));
     const allSelected = selectable.length > 0 && selectable.every((x) => m.selected.has(x.id));
     if (allSelected) selectable.forEach((x) => m.selected.delete(x.id));
     else selectable.forEach((x) => m.selected.add(x.id));
@@ -404,6 +408,7 @@ function filteredModalModels() {
   const m = state.modal;
   if (!m) return [];
   let models = m.models;
+  if (!m.showNonChat) models = models.filter((x) => x.chat !== false);
   if (m.freeOnly) models = models.filter((x) => x.free);
   if (m.q) models = models.filter((x) => x.id.toLowerCase().includes(m.q));
   return models;
@@ -426,6 +431,7 @@ function renderModelList() {
       '<label class="model-item"><input type="checkbox" data-mid="' + esc(x.id) + '"' + (m.selected.has(x.id) ? ' checked' : '') + (already ? ' disabled' : '') + '>' +
       '<span class="id">' + esc(x.id) + '</span>' +
       (x.free ? '<span class="badge free">free</span>' : '') +
+      (x.chat === false ? '<span class="badge" title="Not a chat model - requests routed to it will fail">non-chat</span>' : '') +
       (x.context ? '<span class="ctx">' + Math.round(x.context / 1000) + 'k ctx</span>' : '') +
       (already ? '<span class="ctx">on route</span>' : '') +
       '</label>';
@@ -445,7 +451,7 @@ function renderModelList() {
   });
   const selAll = $('#mm-select-all');
   if (selAll) {
-    const selectable = models.filter((x) => !existing.has(m.pid + '/' + x.id));
+    const selectable = models.filter((x) => x.chat !== false && !existing.has(m.pid + '/' + x.id));
     const allSelected = selectable.length > 0 && selectable.every((x) => m.selected.has(x.id));
     selAll.textContent = allSelected ? 'Clear selection' : 'Select all (' + selectable.length + ')';
     selAll.disabled = !selectable.length;
@@ -641,9 +647,12 @@ function renderPlayground() {
     '<div class="playwrap">' +
     '<div class="playchat">' +
     '<div class="pg-msgs" id="pg-msgs"></div>' +
+    '<div class="pg-attach" id="pg-attach"></div>' +
     '<div class="pg-input-row">' +
-    '<textarea id="pg-input" placeholder="Message... (Enter to send, Shift+Enter for newline)"></textarea>' +
+    '<textarea id="pg-input" placeholder="Message... (Enter to send, Shift+Enter for newline, paste or drop an image)"></textarea>' +
+    '<button class="btn" id="pg-attach-btn" title="Attach image">+ Image</button>' +
     '<button class="btn primary" id="pg-send">Send</button>' +
+    '<input type="file" id="pg-file" accept="image/*" multiple hidden>' +
     '</div>' +
     '</div>' +
     '<div class="pg-side">' +
@@ -683,15 +692,71 @@ function renderPlayground() {
     state.chat.maxTokens = v;
     e.target.value = v;
   };
-  $('#pg-clear').onclick = () => { state.chat.messages = []; renderPlayground(); };
+  $('#pg-clear').onclick = () => { state.chat.messages = []; state.chat.pendingImages = []; renderPlayground(); };
   $('#pg-send').onclick = sendChat;
-  $('#pg-input').addEventListener('keydown', (e) => {
+  const inp = $('#pg-input');
+  inp.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       sendChat();
     }
   });
+  inp.addEventListener('paste', (e) => {
+    const items = (e.clipboardData && e.clipboardData.items) || [];
+    let grabbed = false;
+    for (const it of items) {
+      if (it.kind === 'file' && it.type.indexOf('image/') === 0) {
+        const f = it.getAsFile();
+        if (f) { addImageFile(f); grabbed = true; }
+      }
+    }
+    if (grabbed) e.preventDefault();
+  });
+  inp.addEventListener('dragover', (e) => { e.preventDefault(); });
+  inp.addEventListener('drop', (e) => {
+    const files = (e.dataTransfer && e.dataTransfer.files) || [];
+    let grabbed = false;
+    for (const f of files) {
+      if (f.type.indexOf('image/') === 0) { addImageFile(f); grabbed = true; }
+    }
+    if (grabbed) e.preventDefault();
+  });
+  $('#pg-attach-btn').onclick = () => $('#pg-file').click();
+  $('#pg-file').onchange = (e) => {
+    for (const f of e.target.files || []) if (f.type.indexOf('image/') === 0) addImageFile(f);
+    e.target.value = '';
+  };
+  renderAttach();
   renderChat();
+}
+
+const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+
+function addImageFile(file) {
+  if (file.size > MAX_IMAGE_BYTES) { toast('Image too large (max 8MB)', 'err'); return; }
+  const reader = new FileReader();
+  reader.onload = () => {
+    state.chat.pendingImages.push({ url: String(reader.result), name: file.name || 'pasted image' });
+    renderAttach();
+  };
+  reader.onerror = () => toast('Could not read image', 'err');
+  reader.readAsDataURL(file);
+}
+
+function renderAttach() {
+  const box = $('#pg-attach');
+  if (!box) return;
+  const imgs = state.chat.pendingImages;
+  box.innerHTML = imgs.map((im, i) =>
+    '<div class="pg-thumb"><img src="' + esc(im.url) + '" alt="' + esc(im.name) + '">' +
+    '<button class="pg-thumb-x" data-i="' + i + '" title="Remove" type="button">&times;</button></div>'
+  ).join('');
+  $$('.pg-thumb-x', box).forEach((btn) => {
+    btn.onclick = () => {
+      state.chat.pendingImages.splice(Number(btn.dataset.i), 1);
+      renderAttach();
+    };
+  });
 }
 
 function formatMessage(text) {
@@ -727,13 +792,17 @@ function renderChat() {
   if (!box) return;
   box.innerHTML = state.chat.messages.map((m, i) => {
     const cls = m.role === 'user' ? 'user' : m.error ? 'assistant error' : 'assistant';
+    const imgs = (m.images && m.images.length)
+      ? '<div class="msg-imgs">' + m.images.map((im) => '<img src="' + esc(im.url) + '" alt="' + esc(im.name) + '">').join('') + '</div>'
+      : '';
     const body = m.pending
       ? '<span class="typing"><span></span><span></span><span></span></span>'
       : m.role === 'assistant' && !m.error && !m.streaming
         ? formatMessage(m.content)
-        : '<span class="content">' + esc(m.content) + '</span>';
+        : (m.content ? '<span class="content">' + esc(m.content) + '</span>' : '');
     return (
       '<div class="msg ' + cls + (m.streaming ? ' streaming' : '') + '">' +
+      imgs +
       body +
       (m.via ? '<div class="via">via ' + esc(m.via) + '</div>' : '') +
       (m.usage ? '<div class="usage">' + (m.usage.prompt_tokens || 0) + ' in / ' + (m.usage.completion_tokens || 0) + ' out tokens</div>' : '') +
@@ -757,13 +826,28 @@ function scrollChat() {
   if (box) box.scrollTop = box.scrollHeight;
 }
 
+// Build an OpenAI-style message. When a user turn carries images, content becomes
+// a parts array (text + image_url) so vision models get the attachments.
+function toWireMessage(m) {
+  if (m.role === 'user' && m.images && m.images.length) {
+    const parts = [];
+    if (m.content) parts.push({ type: 'text', text: m.content });
+    for (const im of m.images) parts.push({ type: 'image_url', image_url: { url: im.url } });
+    return { role: m.role, content: parts };
+  }
+  return { role: m.role, content: m.content };
+}
+
 async function sendChat() {
   if (state.chat.busy) return;
   const input = $('#pg-input');
   const text = input.value.trim();
-  if (!text) return;
+  const images = state.chat.pendingImages.slice();
+  if (!text && !images.length) return;
   input.value = '';
-  state.chat.messages.push({ role: 'user', content: text });
+  state.chat.pendingImages = [];
+  renderAttach();
+  state.chat.messages.push({ role: 'user', content: text, images: images.length ? images : undefined });
   const opts = playgroundModelOptions().map((o) => o.id);
   if (!opts.includes(state.chat.model)) state.chat.model = 'auto';
   state.chat.busy = true;
@@ -776,9 +860,9 @@ async function sendChat() {
     const res = await fetch('/v1/chat/completions', {
       method: 'POST',
       headers,
-      body: JSON.stringify({ model: state.chat.model, messages: state.chat.messages.filter((m) => !m.intro && !m.pending).map((m) => ({ role: m.role, content: m.content })), stream: state.chat.stream, max_tokens: state.chat.maxTokens })
+      body: JSON.stringify({ model: state.chat.model, messages: state.chat.messages.filter((m) => !m.intro && !m.pending).map(toWireMessage), stream: state.chat.stream, max_tokens: state.chat.maxTokens })
     });
-    const via = res.headers.get('x-token-route-candidate');
+    const via = res.headers.get('x-zerocode-candidate');
     if (!res.ok) {
       let msg = 'HTTP ' + res.status;
       try { const j = await res.json(); if (j.error && j.error.message) msg = j.error.message; } catch (e) { }
@@ -862,7 +946,7 @@ function renderSettings() {
     '<p class="muted" style="font-size:12px">Port/host changes apply after restart.</p>' +
     '</div>' +
     '<div class="card"><h2>Storage</h2>' +
-    '<p class="muted" style="font-size:13px">Everything lives in <span class="mono">data/config.json</span> next to the app (override with the <span class="mono">TOKEN_ROUTE_HOME</span> env var). API keys never leave this machine.</p>' +
+    '<p class="muted" style="font-size:13px">Everything lives in <span class="mono">data/config.json</span> next to the app (override with the <span class="mono">ZEROCODE_HOME</span> env var). API keys never leave this machine.</p>' +
     '</div>' +
     '</div>' +
     '<button class="btn primary" id="st-save">Save settings</button>';
@@ -876,7 +960,7 @@ function renderSettings() {
     const j = await api('/api/config', { method: 'PUT', body });
     state.cfg = j;
     if (keyVal) localStorage.setItem('tr_key', keyVal);
-    toast(j.restartRequired ? 'Saved. Restart Token Route to apply port/host.' : 'Settings saved', 'ok');
+    toast(j.restartRequired ? 'Saved. Restart ZeroCode to apply port/host.' : 'Settings saved', 'ok');
     renderSettings();
   };
   $('#st-key-clear').onclick = async () => {
