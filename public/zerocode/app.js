@@ -956,20 +956,24 @@
     return m.owned_by ? 'via ' + m.owned_by : '';
   }
 
+  // The top bar and the composer each have a picker; both show the same list.
+  const MODEL_PICKERS = [['model-btn', 'model-menu'], ['cmodel-btn', 'cmodel-menu']];
+
   function renderModelMenu() {
-    const menu = $('model-menu');
-    menu.innerHTML = models.length
+    const html = models.length
       ? models.map((m) => `
-        <button role="option" data-model="${esc(m.id)}" class="${m.id === settings.model ? 'sel' : ''}" aria-selected="${m.id === settings.model}">
+        <button type="button" role="option" data-model="${esc(m.id)}" class="${m.id === settings.model ? 'sel' : ''}" aria-selected="${m.id === settings.model}">
           <span class="m-id">${esc(modelName(m.id))}</span><span class="m-sub">${esc(modelSub(m))}</span>
         </button>`).join('')
       : '<div class="m-empty">No models on your route yet. Add providers in the Gateway dashboard.</div>';
+    for (const [, menuId] of MODEL_PICKERS) $(menuId).innerHTML = html;
   }
 
   function setModel(id) {
     settings.model = id;
     save(KEYS.settings, settings);
     $('model-label').textContent = modelName(id);
+    $('cmodel-label').textContent = modelName(id);
     $('footer-model').textContent = modelName(id);
     renderModelMenu();
   }
@@ -2325,21 +2329,29 @@
     $('gw-refresh').addEventListener('click', loadGateway);
     $('gw-errors-only').addEventListener('change', loadGateway);
 
-    // model picker
-    const menu = $('model-menu');
-    $('model-btn').addEventListener('click', (e) => {
-      e.stopPropagation();
-      const open = menu.classList.toggle('hidden') === false;
-      $('model-btn').setAttribute('aria-expanded', String(open));
-      if (open) loadModels();
-    });
-    menu.addEventListener('click', (e) => {
-      const b = e.target.closest('[data-model]');
-      if (!b) return;
-      setModel(b.dataset.model);
-      menu.classList.add('hidden');
-      $('model-btn').setAttribute('aria-expanded', 'false');
-    });
+    // model pickers (top bar + composer)
+    const closePickers = (except) => {
+      for (const [btnId, menuId] of MODEL_PICKERS) {
+        if (menuId === except) continue;
+        $(menuId).classList.add('hidden');
+        $(btnId).setAttribute('aria-expanded', 'false');
+      }
+    };
+    for (const [btnId, menuId] of MODEL_PICKERS) {
+      $(btnId).addEventListener('click', (e) => {
+        e.stopPropagation();
+        closePickers(menuId);
+        const open = $(menuId).classList.toggle('hidden') === false;
+        $(btnId).setAttribute('aria-expanded', String(open));
+        if (open) loadModels();
+      });
+      $(menuId).addEventListener('click', (e) => {
+        const b = e.target.closest('[data-model]');
+        if (!b) return;
+        setModel(b.dataset.model);
+        closePickers();
+      });
+    }
 
     // panel menu
     const pmenu = $('panel-menu');
@@ -2364,7 +2376,7 @@
     });
 
     document.addEventListener('click', (e) => {
-      if (!e.target.closest('.model-picker')) { menu.classList.add('hidden'); $('model-btn').setAttribute('aria-expanded', 'false'); }
+      if (!e.target.closest('.model-picker')) closePickers();
       if (!e.target.closest('.panel-menu')) pmenu.classList.add('hidden');
     });
 

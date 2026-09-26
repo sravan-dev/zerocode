@@ -264,6 +264,14 @@
                 <svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><circle cx="12" cy="13" r="3"/><path d="m14.5 15.5 2 2"/></svg>
                 Browse Prompts
               </button>
+              <div class="model-picker composer-picker">
+                <button type="button" class="tool" id="cmodel-btn" aria-haspopup="listbox" aria-expanded="false" title="Choose model">
+                  <span class="model-dot"></span>
+                  <span id="cmodel-label">Smart</span>
+                  <svg viewBox="0 0 24 24"><path d="m6 15 6-6 6 6"/></svg>
+                </button>
+                <div class="model-menu up hidden" id="cmodel-menu" role="listbox"></div>
+              </div>
               <span class="counter" id="counter">0 / 32,000</span>
             </div>
           </form>

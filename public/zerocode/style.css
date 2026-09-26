@@ -184,6 +184,10 @@ kbd {
 .model-menu .m-id { font-weight: 600; font-size: 13px; word-break: break-all; }
 .model-menu .m-sub { font-size: 12px; color: var(--muted); }
 .model-menu .m-empty { padding: 10px; color: var(--muted); font-size: 13px; }
+/* Composer picker opens upward, anchored to its left edge. */
+.model-menu.up { top: auto; bottom: calc(100% + 8px); right: auto; left: 0; max-width: calc(100vw - 32px); }
+.composer-picker #cmodel-label { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.composer-picker .model-dot { width: 7px; height: 7px; }
 
 .stage { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) 272px; min-height: 0; }
 .shell.panel-closed .stage { grid-template-columns: minmax(0, 1fr); }
