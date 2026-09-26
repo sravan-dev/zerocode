@@ -8,12 +8,6 @@ import { Router } from './router';
 import { LogStore } from './logs';
 import { retryAfterMs } from './utils';
 
-const RETRYABLE_EXTRA = new Set([401, 402, 403, 404, 408, 409, 429]);
-
-function isRetryable(status: number): boolean {
-  return status >= 500 || RETRYABLE_EXTRA.has(status);
-}
-
 function maxTokensCap(errorText: string): number | undefined {
   const m = /max_(?:completion_)?tokens`?\s*(?:must be|should be)?\s*(?:less than or equal to|<=|at most|no more than)\s*`?(\d+)/i.exec(errorText);
   const n = m ? Number(m[1]) : NaN;
@@ -131,13 +125,11 @@ export function createProxyHandlers(deps: ProxyDeps) {
     const requested = typeof body.model === 'string' && body.model ? body.model : 'auto';
     const stream = body.stream === true;
     const started = Date.now();
-    const resolved = router.resolve(requested, cfg);
-    const chain = router.ordered(resolved.candidates, cfg.strategy);
+    const chain = router.resolve(requested, cfg);
+    // Healthy models only; cooling ones are tried only when nothing else is left.
     let usable = chain.filter((c) => router.isAvailable(c, cfg));
-    if (!resolved.direct) {
-      const hot = usable.filter((c) => !router.cooling(router.key(c)));
-      if (hot.length) usable = hot;
-    }
+    const hot = usable.filter((c) => !router.cooling(router.key(c)));
+    if (hot.length) usable = hot;
     if (!usable.length) {
       logs.add({
         ts: started,
@@ -213,8 +205,7 @@ export function createProxyHandlers(deps: ProxyDeps) {
         lastError = `${p.name} HTTP ${r.status}: ${summarize(text).slice(0, 300)}`;
         router.markFailure(cand, raMs, lastError, cfg);
         // A 400/422 from one model is usually model-specific (wrong model type, unsupported param),
-        // so keep walking the chain. A pinned model has nowhere else to go.
-        if (resolved.direct && !isRetryable(r.status)) break;
+        // so keep walking the chain, pinned or not.
         continue;
       }
       if (!stream) {

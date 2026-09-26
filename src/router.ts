@@ -59,22 +59,28 @@ export class Router {
     return candidates.map((_, i) => candidates[(start + i) % candidates.length]);
   }
 
-  resolve(model: string, cfg: AppConfig): { candidates: RouteCandidate[]; direct: boolean } {
+  /**
+   * Candidates to try, in order. A pinned model goes first, followed by the rest of the
+   * route so a cooling or failing pin still lands on a healthy model.
+   */
+  resolve(model: string, cfg: AppConfig): RouteCandidate[] {
+    const strategy = cfg.strategy;
     const chain = cfg.route;
     const m = (model || '').trim();
-    if (!m || m === 'auto' || m === 'default' || m === 'zerocode' || m === cfg.routeName) {
-      return { candidates: chain, direct: false };
-    }
-    const slash = m.indexOf('/');
-    if (slash > 0) {
-      const pid = m.slice(0, slash);
-      if (cfg.providers.some((p) => p.id === pid)) {
-        return { candidates: [{ provider: pid, model: m.slice(slash + 1) }], direct: true };
+    let pinned: RouteCandidate | undefined;
+    if (m && m !== 'auto' && m !== 'default' && m !== 'zerocode' && m !== cfg.routeName) {
+      const slash = m.indexOf('/');
+      const pid = slash > 0 ? m.slice(0, slash) : '';
+      if (pid && cfg.providers.some((p) => p.id === pid)) {
+        const id = m.slice(slash + 1);
+        pinned = chain.find((c) => c.provider === pid && c.model === id) || { provider: pid, model: id };
+      } else {
+        pinned = chain.find((c) => c.model === m);
       }
     }
-    const exact = chain.find((c) => c.model === m);
-    if (exact) return { candidates: [exact], direct: true };
-    return { candidates: chain, direct: false };
+    if (!pinned) return this.ordered(chain, strategy);
+    const pinKey = this.key(pinned);
+    return [pinned, ...this.ordered(chain.filter((c) => this.key(c) !== pinKey), strategy)];
   }
 
   healthView(cfg: AppConfig): CandidateHealth[] {
