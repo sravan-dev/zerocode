@@ -502,6 +502,8 @@ kbd {
 .cx-mid { flex: 1; min-width: 0; font: 12.5px/1.4 ui-monospace, "Cascadia Mono", Consolas, monospace; word-break: break-all; }
 .cx-ctx { font-size: 11.5px; white-space: nowrap; }
 .cx-model .btn { min-width: 96px; justify-content: center; }
+.cx-model .btn.cx-test { min-width: 72px; }
+.cx-model .pill { white-space: nowrap; }
 .cx-note { padding: 18px; text-align: center; font-size: 13px; color: var(--muted); border: 1px dashed var(--border-strong); border-radius: 12px; margin-bottom: 18px; }
 .cx-note.err { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, transparent); }
 .cx-main > .cx-sub { margin: 4px 0 10px; }

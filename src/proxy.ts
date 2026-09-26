@@ -125,9 +125,11 @@ export function createProxyHandlers(deps: ProxyDeps) {
     const requested = typeof body.model === 'string' && body.model ? body.model : 'auto';
     const stream = body.stream === true;
     const started = Date.now();
-    const chain = router.resolve(requested, cfg);
+    // x-zerocode-strict: 1 pins the request to exactly the named model (used by Test buttons).
+    const strict = req.headers['x-zerocode-strict'] === '1';
+    const { candidates: chain, pinned } = router.resolve(requested, cfg, strict);
     // Healthy models only; cooling ones are tried only when nothing else is left.
-    let usable = chain.filter((c) => router.isAvailable(c, cfg));
+    let usable = chain.filter((c) => (c === pinned && c.enabled === undefined ? router.providerReady(c, cfg) : router.isAvailable(c, cfg)));
     const hot = usable.filter((c) => !router.cooling(router.key(c)));
     if (hot.length) usable = hot;
     if (!usable.length) {

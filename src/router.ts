@@ -61,10 +61,10 @@ export class Router {
 
   /**
    * Candidates to try, in order. A pinned model goes first, followed by the rest of the
-   * route so a cooling or failing pin still lands on a healthy model.
+   * route so a cooling or failing pin still lands on a healthy model. `strict` keeps only
+   * the pin, for health tests that must not be answered by another model.
    */
-  resolve(model: string, cfg: AppConfig): RouteCandidate[] {
-    const strategy = cfg.strategy;
+  resolve(model: string, cfg: AppConfig, strict = false): { candidates: RouteCandidate[]; pinned?: RouteCandidate } {
     const chain = cfg.route;
     const m = (model || '').trim();
     let pinned: RouteCandidate | undefined;
@@ -72,15 +72,16 @@ export class Router {
       const slash = m.indexOf('/');
       const pid = slash > 0 ? m.slice(0, slash) : '';
       if (pid && cfg.providers.some((p) => p.id === pid)) {
-        const id = m.slice(slash + 1);
-        pinned = chain.find((c) => c.provider === pid && c.model === id) || { provider: pid, model: id };
+        // A provider-qualified id bypasses the route's on/off switch.
+        pinned = { provider: pid, model: m.slice(slash + 1) };
       } else {
         pinned = chain.find((c) => c.model === m);
       }
     }
-    if (!pinned) return this.ordered(chain, strategy);
+    if (!pinned) return { candidates: this.ordered(chain, cfg.strategy) };
+    if (strict) return { candidates: [pinned], pinned };
     const pinKey = this.key(pinned);
-    return [pinned, ...this.ordered(chain.filter((c) => this.key(c) !== pinKey), strategy)];
+    return { candidates: [pinned, ...this.ordered(chain.filter((c) => this.key(c) !== pinKey), cfg.strategy)], pinned };
   }
 
   healthView(cfg: AppConfig): CandidateHealth[] {

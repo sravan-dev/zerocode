@@ -1162,6 +1162,13 @@
     main.innerHTML = connDetailHtml(p);
   }
 
+  function connTestPill(t) {
+    if (!t || t.running) return '';
+    return t.ok
+      ? `<span class="pill ok">OK · ${t.ms} ms</span>`
+      : `<span class="pill err" title="${esc(t.error)}">Failed</span>`;
+  }
+
   function connDetailHtml(p) {
     const cat = catalogFor(p) || {};
     const [tone, label] = providerStatus(p);
@@ -1186,10 +1193,13 @@
       modelsHtml = list.length
         ? `<div class="cx-models">${list.slice(0, 300).map((x) => {
             const on = onRoute.has(x.id);
+            const k = candKey({ provider: p.id, model: x.id });
             return `<div class="cx-model">
               <span class="cx-mid">${esc(x.id)}</span>
               ${x.free ? '<span class="pill ok">Free</span>' : ''}
               ${x.context ? `<span class="muted cx-ctx">${fmtNum(x.context)} ctx</span>` : ''}
+              ${connTestPill(mv.tests[k])}
+              <button class="btn sm ghost cx-test" data-test-model="${esc(k)}" ${mv.tests[k]?.running ? 'disabled' : ''}>${mv.tests[k]?.running ? 'Testing…' : 'Test'}</button>
               <button class="btn sm ${on ? 'on' : 'ghost'}" data-route="${esc(x.id)}" ${dis}>${on ? '✓ On route' : 'Add'}</button>
             </div>`;
           }).join('')}</div>${list.length > 300 ? `<div class="cx-note">Showing 300 of ${list.length}. Search to narrow down.</div>` : ''}`
@@ -1468,6 +1478,18 @@
     main.addEventListener('click', (e) => {
       const r = e.target.closest('[data-route]');
       if (r) { toggleRoute(r.dataset.route); return; }
+      const tb = e.target.closest('[data-test-model]');
+      if (tb) {
+        const k = tb.dataset.testModel;
+        const run = testModel(k);
+        renderConn();
+        run.then(() => {
+          const t = mv.tests[k];
+          if (t && !t.ok) toast(`${k.slice(k.indexOf('::') + 2)}: ${t.error}`);
+          renderConn();
+        });
+        return;
+      }
       if (e.target.closest('#cx-load')) loadProviderModels(conn.sel);
       else if (e.target.closest('#cx-remove')) removeConnector();
       else if (e.target.closest('#cx-google-login')) startGoogleLogin();
@@ -1657,7 +1679,8 @@
     try {
       const res = await fetch('/v1/chat/completions', {
         method: 'POST',
-        headers: headers(),
+        // Strict: a failing model must fail its test, not be answered by a fallback.
+        headers: { ...headers(), 'x-zerocode-strict': '1' },
         body: JSON.stringify({ model: `${provider}/${model}`, stream: false, max_tokens: 16, messages: [{ role: 'user', content: 'Reply with: ok' }] })
       });
       let err = '';
