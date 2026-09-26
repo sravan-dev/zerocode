@@ -1630,6 +1630,9 @@
       b.textContent = mv.sel.size ? `${verb} selected` : `${verb} all shown`;
       b.disabled = mv.busy || (!mv.sel.size && !shown.length);
     });
+    const rm = $('models-remove');
+    rm.textContent = mv.sel.size ? `Remove selected` : 'Remove all shown';
+    rm.disabled = mv.busy || (!mv.sel.size && !shown.length);
 
     if (!route.length) {
       list.innerHTML = '<div class="empty-state">No models on your route yet. Use <b>+ Add models</b> to pick some from a connector.</div>';
@@ -1673,8 +1676,33 @@
         <label class="switch" title="${c.enabled === false ? 'Enable' : 'Disable'}">
           <input type="checkbox" data-toggle="${esc(k)}" ${c.enabled === false ? '' : 'checked'} ${dis}><span></span>
         </label>
+        <button type="button" class="icon-btn m-remove" data-remove="${esc(k)}" title="Remove from route" aria-label="Remove ${esc(c.model)} from route" ${dis}>
+          <svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg>
+        </button>
       </div>`;
     }).join('') + '</div>';
+  }
+
+  // Take models off the route entirely. They can be added back from Connectors.
+  async function removeModels(keys) {
+    if (!keys.size || mv.busy) return;
+    const n = keys.size;
+    const one = n === 1 ? [...keys][0] : '';
+    if (!confirm(one
+      ? `Remove ${one.slice(one.indexOf('::') + 2)} from your route? You can add it back from Connectors.`
+      : `Remove ${n} models from your route? You can add them back from Connectors.`)) return;
+    mv.busy = true;
+    renderModelsView();
+    try {
+      await putConfig({ route: conn.cfg.route.filter((c) => !keys.has(candKey(c))) });
+      for (const k of keys) { mv.sel.delete(k); delete mv.tests[k]; }
+      toast(n === 1 ? 'Model removed' : `Removed ${n} models`);
+    } catch (e) {
+      toast(e.message);
+    } finally {
+      mv.busy = false;
+      renderModelsView();
+    }
   }
 
   async function setModelsEnabled(keys, on) {
@@ -1784,7 +1812,12 @@
       if (!on && n > 1 && !confirm(`Disable ${n} models? Smart will stop using them until you enable them again.`)) return;
       setModelsEnabled(keys, on).then(() => { mv.sel.clear(); renderModelsView(); });
     }));
+    $('models-remove').addEventListener('click', () => {
+      removeModels(mv.sel.size ? new Set(mv.sel) : new Set(modelsShown().map(({ c }) => candKey(c))));
+    });
     $('models-list').addEventListener('click', (e) => {
+      const rb = e.target.closest('[data-remove]');
+      if (rb) { removeModels(new Set([rb.dataset.remove])); return; }
       const b = e.target.closest('[data-test]');
       if (b) testModel(b.dataset.test).then(() => loadModelsView());
     });

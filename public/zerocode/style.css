@@ -656,6 +656,9 @@ kbd {
 .m-off { font: 600 10.5px/1 ui-sans-serif, system-ui, sans-serif; text-transform: uppercase; letter-spacing: .05em; padding: 2px 6px; border-radius: 5px; background: var(--hover); color: var(--muted); vertical-align: 2px; }
 .m-row.off .health { opacity: .7; }
 .m-test { min-width: 58px; justify-content: center; }
+.m-remove { width: 32px; height: 32px; flex: none; }
+.m-remove:hover, .m-danger:hover:not(:disabled) { color: var(--danger); }
+.m-remove svg { width: 17px; height: 17px; }
 @media (max-width: 820px) {
   .m-health-tiles { grid-template-columns: 1fr 1fr; }
   .health { min-width: 0; }
